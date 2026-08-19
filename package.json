@@ -1,0 +1,18 @@
+{
+  "name": "sistema-gestion-local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sistema de gestión integral para local de venta de dispositivos, reparaciones y finanzas",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "build": "npm run build --workspace=client",
+    "start": "npm run start --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
