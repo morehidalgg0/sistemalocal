@@ -4,15 +4,12 @@
   "private": true,
   "description": "Sistema de gestión integral para local de venta de dispositivos, reparaciones y finanzas",
   "scripts": {
-    "build": "npm run build --prefix client"
+    "build": "cd client && npm install && npm run build"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "pg": "^8.13.3"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.2"
   }
 }
