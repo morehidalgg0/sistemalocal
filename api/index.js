@@ -1,28 +1,13 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import excelData from './excelData.js';
 
 dotenv.config();
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
 app.use(express.json());
-
-// Cargar datos
-const seedPath = path.join(__dirname, '../server/src/seeds/excelData.js');
-let excelData = {};
-try {
-  const mod = await import('../server/src/seeds/excelData.js');
-  excelData = mod.default || mod;
-} catch (e) {
-  console.log("Seed import note:", e.message);
-}
 
 let store = { ...excelData };
 
