@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Package, Plus, Search, AlertCircle, Tag, CheckCircle2 } from 'lucide-react';
 
@@ -33,7 +34,7 @@ export default function Inventario({ config, onDataChange }) {
       const data = await res.json();
       setItems(data || []);
     } catch (err) {
-      console.error("Error fetching inventario:", err);
+      console.warn("Using fallback inventario:", err); setItems(fallbackData.inventario_items || []);
     } finally {
       setLoading(false);
     }

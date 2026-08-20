@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { 
   LayoutDashboard, 
   TrendingUp, 
@@ -8,37 +8,99 @@ import {
   DollarSign, 
   Users, 
   CreditCard,
-  Settings,
-  Menu,
-  X
-} from 'lucide-react';
+  Menu, 
+  X 
+} from "lucide-react";
 
-import Dashboard from './pages/Dashboard';
-import Ventas from './pages/Ventas';
-import Dispositivos from './pages/Dispositivos';
-import Inventario from './pages/Inventario';
-import Taller from './pages/Taller';
-import Cajas from './pages/Cajas';
-import CuentasCorrientes from './pages/CuentasCorrientes';
-import GastosFinanzas from './pages/GastosFinanzas';
+import Dashboard from "./pages/Dashboard";
+import Ventas from "./pages/Ventas";
+import Dispositivos from "./pages/Dispositivos";
+import Inventario from "./pages/Inventario";
+import Taller from "./pages/Taller";
+import Cajas from "./pages/Cajas";
+import CuentasCorrientes from "./pages/CuentasCorrientes";
+import GastosFinanzas from "./pages/GastosFinanzas";
+import fallbackData from "./data/fallbackData";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
-  const [config, setConfig] = useState(null);
+  const [config, setConfig] = useState(fallbackData.configuracion);
   const [loading, setLoading] = useState(true);
+
+  const calculateFallbackDashboard = () => {
+    const dolar = parseFloat(fallbackData.configuracion?.dolar_blue || 1480);
+    const stockDisp = (fallbackData.dispositivos || [])
+      .filter(d => d.estado === "En Stock" || d.estado === "Señado")
+      .reduce((a, d) => a + (parseFloat(d.costo_usd) || 0) + (parseFloat(d.costo_reparacion_usd) || 0), 0);
+    const stockAcc = (fallbackData.inventario_items || [])
+      .reduce((a, i) => a + ((parseFloat(i.costo_usd) || ((parseFloat(i.costo_pesos)||0)/dolar)) * (i.stock_actual || 0)), 0);
+    let saldoUSD = 0, saldoARS = 0;
+    (fallbackData.cuentas_caja || []).forEach(c => {
+      const s = parseFloat(c.saldo_actual) || 0;
+      if (c.moneda === "USD" || c.moneda === "USDT") saldoUSD += s;
+      else if (c.moneda === "ARS") saldoARS += s;
+    });
+    const totalLiquido = saldoUSD + (saldoARS / dolar);
+    const ventas = fallbackData.ventas || [];
+    const gananciaMes = ventas.reduce((a, v) => a + (parseFloat(v.ganancia_usd) || 0), 0);
+    const totalVendidos = ventas.length;
+    const promedio = totalVendidos > 0 ? gananciaMes / totalVendidos : 0;
+
+    const deudores = (fallbackData.deudas_deudores || []).filter(d => d.tipo === "DEUDOR" && d.estado !== "Cancelado");
+    const totalDeudoresUSD = deudores.reduce((a, d) => a + (parseFloat(d.monto_pendiente) || 0), 0);
+
+    const deudas = (fallbackData.deudas_deudores || []).filter(d => d.tipo === "DEUDA" && d.estado !== "Cancelado");
+    const totalDeudasUSD = deudas.reduce((a, d) => a + (parseFloat(d.monto_pendiente) || 0), 0);
+
+    const ccProv = (fallbackData.entidades_cc || [])
+      .filter(e => e.tipo === "PROVEEDOR")
+      .reduce((a, e) => a + (parseFloat(e.saldo_adeudado) || 0), 0);
+
+    return {
+      kpis: {
+        capitalTotalUSD: stockDisp + stockAcc + totalLiquido,
+        stockDispositivosUSD: stockDisp,
+        stockAccesoriosUSD: stockAcc,
+        totalLiquidoUSD: totalLiquido,
+        saldoCajasUSD: saldoUSD,
+        saldoCajasARS: saldoARS,
+        gananciaMesUSD: gananciaMes,
+        totalEquiposVendidos: totalVendidos,
+        promedioGananciaPorTel: promedio,
+        totalDeudoresUSD: totalDeudoresUSD,
+        totalDeudasUSD: totalDeudasUSD,
+        saldoCCProveedores: ccProv,
+        dolarActual: dolar
+      },
+      equiposEnStock: (fallbackData.dispositivos || []).filter(d => d.estado === "En Stock").length,
+      reparacionesActivas: (fallbackData.reparaciones || []).filter(r => r.estado !== "Entregado y Cobrado").length,
+      ultimasVentas: (fallbackData.ventas || []).slice(-5).reverse(),
+      ultimosMovimientos: (fallbackData.caja_movimientos || []).slice(-6).reverse()
+    };
+  };
 
   const fetchGlobalData = async () => {
     try {
       const [resDash, resConf] = await Promise.all([
-        fetch('/api/dashboard').then(r => r.json()),
-        fetch('/api/config').then(r => r.json())
+        fetch("/api/dashboard").then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch("/api/config").then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
-      setDashboardData(resDash);
-      setConfig(resConf.config);
+      if (resDash && resDash.kpis) {
+        setDashboardData(resDash);
+      } else {
+        setDashboardData(calculateFallbackDashboard());
+      }
+      if (resConf && resConf.config) {
+        setConfig(resConf.config);
+      } else {
+        setConfig(fallbackData.configuracion);
+      }
     } catch (err) {
-      console.error("Error fetching global data:", err);
+      console.warn("Using fallback dashboard data:", err);
+      setDashboardData(calculateFallbackDashboard());
+      setConfig(fallbackData.configuracion);
     } finally {
       setLoading(false);
     }
@@ -49,14 +111,14 @@ export default function App() {
   }, []);
 
   const navItems = [
-    { id: 'dashboard', label: 'Panel General', icon: LayoutDashboard },
-    { id: 'ventas', label: 'Facturación / Ventas', icon: TrendingUp },
-    { id: 'dispositivos', label: 'Stock Celulares', icon: Smartphone },
-    { id: 'inventario', label: 'Accesorios & Repuestos', icon: Package },
-    { id: 'taller', label: 'Servicio Técnico', icon: Wrench },
-    { id: 'cajas', label: 'Cajas & Bancos', icon: DollarSign },
-    { id: 'cc', label: 'Cuentas Corrientes', icon: Users },
-    { id: 'gastos', label: 'Gastos & Finanzas', icon: CreditCard },
+    { id: "dashboard", label: "Panel General", icon: LayoutDashboard },
+    { id: "ventas", label: "Facturación / Ventas", icon: TrendingUp },
+    { id: "dispositivos", label: "Stock Celulares", icon: Smartphone },
+    { id: "inventario", label: "Accesorios & Repuestos", icon: Package },
+    { id: "taller", label: "Servicio Técnico", icon: Wrench },
+    { id: "cajas", label: "Cajas & Bancos", icon: DollarSign },
+    { id: "cc", label: "Cuentas Corrientes", icon: Users },
+    { id: "gastos", label: "Gastos & Finanzas", icon: CreditCard },
   ];
 
   return (
@@ -74,7 +136,7 @@ export default function App() {
         fixed lg:static top-0 bottom-0 left-0 z-50
         w-64 bg-slate-900 border-r border-slate-800/80 flex flex-col justify-between
         transform transition-transform duration-300 ease-in-out
-        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
       `}>
         <div>
           {/* Logo & Store Branding */}
@@ -111,12 +173,12 @@ export default function App() {
                   className={`
                     w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition-all
                     ${isActive 
-                      ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25 font-semibold' 
-                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                      ? "bg-sky-600 text-white shadow-md shadow-sky-600/25 font-semibold" 
+                      : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
                     }
                   `}
                 >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
                   {item.label}
                 </button>
               );
@@ -130,7 +192,7 @@ export default function App() {
             <span>Base de Datos:</span>
             <span className="inline-flex items-center gap-1.5 font-medium text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              PostgreSQL Ready
+              Sincronizado
             </span>
           </div>
           <div className="text-[10px] text-slate-500 text-center pt-1">
@@ -158,14 +220,14 @@ export default function App() {
           <div className="flex items-center gap-4 text-xs font-mono">
             <div className="hidden sm:flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
               <span>Dólar Blue:</span>
-              <strong className="text-emerald-400">${config?.dolar_blue || '1480'}</strong>
+              <strong className="text-emerald-400">${config?.dolar_blue || "1480"}</strong>
             </div>
           </div>
         </header>
 
         {/* Dynamic Page Rendering */}
         <div className="p-6 max-w-7xl w-full mx-auto">
-          {activeTab === 'dashboard' && (
+          {activeTab === "dashboard" && (
             <Dashboard 
               data={dashboardData} 
               config={config} 
@@ -173,49 +235,49 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'ventas' && (
+          {activeTab === "ventas" && (
             <Ventas 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'dispositivos' && (
+          {activeTab === "dispositivos" && (
             <Dispositivos 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'inventario' && (
+          {activeTab === "inventario" && (
             <Inventario 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'taller' && (
+          {activeTab === "taller" && (
             <Taller 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'cajas' && (
+          {activeTab === "cajas" && (
             <Cajas 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'cc' && (
+          {activeTab === "cc" && (
             <CuentasCorrientes 
               config={config} 
               onDataChange={fetchGlobalData} 
             />
           )}
 
-          {activeTab === 'gastos' && (
+          {activeTab === "gastos" && (
             <GastosFinanzas 
               config={config} 
               onDataChange={fetchGlobalData} 

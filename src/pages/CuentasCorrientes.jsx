@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign } from 'lucide-react';
 

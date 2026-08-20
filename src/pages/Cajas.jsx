@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw, Plus, CreditCard, Wallet, Landmark } from 'lucide-react';
 
@@ -43,7 +44,7 @@ export default function Cajas({ config, onDataChange }) {
         setFormData(prev => ({ ...prev, cuenta_id: resCajas[0].id }));
       }
     } catch (err) {
-      console.error("Error fetching cajas:", err);
+      console.warn("Using fallback cajas:", err); setCajas(fallbackData.cuentas_caja || []); setMovimientos(fallbackData.caja_movimientos || []);
     } finally {
       setLoading(false);
     }

@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Wrench, Plus, CheckCircle2, Clock, AlertTriangle, User, Tag } from 'lucide-react';
 
@@ -34,7 +35,7 @@ export default function Taller({ config, onDataChange }) {
       const data = await res.json();
       setReparaciones(data || []);
     } catch (err) {
-      console.error("Error fetching reparaciones:", err);
+      console.warn("Using fallback reparaciones:", err); setReparaciones(fallbackData.reparaciones || []);
     } finally {
       setLoading(false);
     }

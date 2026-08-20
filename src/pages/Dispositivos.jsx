@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag } from 'lucide-react';
 

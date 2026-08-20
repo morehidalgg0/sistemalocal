@@ -1,3 +1,4 @@
+import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { CreditCard, DollarSign, Plus, CheckCircle2, AlertCircle, TrendingUp, Building2 } from 'lucide-react';
 
@@ -53,7 +54,7 @@ export default function GastosFinanzas({ config, onDataChange }) {
       setDeudas(resDeudas || []);
       setInversiones(resInv || []);
     } catch (err) {
-      console.error("Error fetching finanzas:", err);
+      console.warn("Using fallback finanzas:", err); setGastos(fallbackData.gastos_fijos || []); setDeudas(fallbackData.deudas_deudores || []); setInversiones(fallbackData.inversiones || []);
     } finally {
       setLoading(false);
     }
