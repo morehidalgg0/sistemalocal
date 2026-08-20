@@ -9,6 +9,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Iniciar DB antes de resolver rutas
 let dbInitPromise = null;
 app.use(async (req, res, next) => {
   if (!dbInitPromise) {
@@ -18,14 +19,8 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Registrar rutas tanto en /api como en la raíz de la serverless function
 app.use('/api', apiRoutes);
-
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'OK',
-    deployed: 'Vercel Serverless',
-    time: new Date().toISOString()
-  });
-});
+app.use('/', apiRoutes);
 
 module.exports = app;
