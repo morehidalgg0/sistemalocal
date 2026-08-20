@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "workspaces": [],
   "description": "Sistema de gestión integral para local de venta de dispositivos, reparaciones y finanzas",
   "scripts": {
     "dev": "vite --port 3000 --host",
