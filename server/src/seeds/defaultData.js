@@ -1266,17 +1266,6 @@ module.exports = {
         "detalles": "12 Pro Azul 256GB"
     }
 ],
-  inventario_items: [
-    { id: 1, categoria: "Accesorio", nombre: "Cargador Rápido 20W Original", stock_actual: 50, stock_minimo: 5, costo_pesos: 8340, costo_usd: 5.6, precio_venta_pesos: 25000, precio_venta_usd: 20, ubicacion: "Vitrina 1" },
-    { id: 2, categoria: "Accesorio", nombre: "Cable USB-C a Lightning 1m", stock_actual: 31, stock_minimo: 5, costo_pesos: 2900, costo_usd: 2.0, precio_venta_pesos: 10000, precio_venta_usd: 8, ubicacion: "Mostrador" },
-    { id: 3, categoria: "Accesorio", nombre: "Cable Tipo C a Tipo C Mallado", stock_actual: 30, stock_minimo: 5, costo_pesos: 4060, costo_usd: 2.8, precio_venta_pesos: 12000, precio_venta_usd: 9, ubicacion: "Mostrador" },
-    { id: 4, categoria: "Accesorio", nombre: "Fundas MagSafe Premium", stock_actual: 195, stock_minimo: 20, costo_pesos: 4500, costo_usd: 3.1, precio_venta_pesos: 15000, precio_venta_usd: 12, ubicacion: "Pared Accesorios" },
-    { id: 5, categoria: "Accesorio", nombre: "Vidrios Templados 9D / Privacidad", stock_actual: 419, stock_minimo: 50, costo_pesos: 681, costo_usd: 0.5, precio_venta_pesos: 5000, precio_venta_usd: 4, ubicacion: "Cajón 2" },
-    { id: 6, categoria: "Repuesto", nombre: "Batería iPhone 11 / 11 Pro", stock_actual: 4, stock_minimo: 2, costo_pesos: 20500, costo_usd: 14.0, precio_venta_pesos: 45000, precio_venta_usd: 35, ubicacion: "Taller" },
-    { id: 7, categoria: "Repuesto", nombre: "Batería iPhone 12 / 12 Pro", stock_actual: 2, stock_minimo: 2, costo_pesos: 27280, costo_usd: 18.5, precio_venta_pesos: 55000, precio_venta_usd: 40, ubicacion: "Taller" },
-    { id: 8, categoria: "Repuesto", nombre: "Batería iPhone 13", stock_actual: 3, stock_minimo: 2, costo_pesos: 22000, costo_usd: 15.0, precio_venta_pesos: 50000, precio_venta_usd: 38, ubicacion: "Taller" },
-    { id: 9, categoria: "Repuesto", nombre: "Tapas Traseras Laser iPhone Varios", stock_actual: 19, stock_minimo: 5, costo_pesos: 10000, costo_usd: 6.8, precio_venta_pesos: 28000, precio_venta_usd: 25, ubicacion: "Taller" }
-  ],
   gastos_fijos: [
     { id: 1, concepto: "Alquiler Oficina Rioja (2B)", persona_responsable: "Inmobiliaria", monto: 550, moneda: "USD", dia_vencimiento: 10, pagado: false },
     { id: 2, concepto: "Sueldos Personal", persona_responsable: "Equipo", monto: 1200, moneda: "USD", dia_vencimiento: 5, pagado: false },

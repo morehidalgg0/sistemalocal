@@ -114,12 +114,16 @@ const excelApiPath = path.join(basePath, 'api/excelData.js');
   }
 });
 
-// 4. Update client fallbackData.js
-const fallbackPath = path.join(basePath, 'client/src/data/fallbackData.js');
-if (fs.existsSync(fallbackPath)) {
-  let content = fs.readFileSync(fallbackPath, 'utf8');
-  const dispRegex = /"dispositivos":\s*\[[\s\S]*?\n  \],/;
-  content = content.replace(dispRegex, `"dispositivos": ${JSON.stringify(allDispositivos, null, 4)},`);
-  fs.writeFileSync(fallbackPath, content, 'utf8');
-  console.log('✅ Updated client/src/data/fallbackData.js');
-}
+// 4. Update fallbackData.js in both client/src and root src
+const fallbackPathClient = path.join(basePath, 'client/src/data/fallbackData.js');
+const fallbackPathRoot = path.join(basePath, 'src/data/fallbackData.js');
+
+[fallbackPathClient, fallbackPathRoot].forEach(fallbackPath => {
+  if (fs.existsSync(fallbackPath)) {
+    let content = fs.readFileSync(fallbackPath, 'utf8');
+    const dispRegex = /"dispositivos":\s*\[[\s\S]*?\n  \],/;
+    content = content.replace(dispRegex, `"dispositivos": ${JSON.stringify(allDispositivos, null, 4)},`);
+    fs.writeFileSync(fallbackPath, content, 'utf8');
+    console.log(`✅ Updated ${fallbackPath}`);
+  }
+});

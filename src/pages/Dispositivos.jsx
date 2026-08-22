@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag } from 'lucide-react';
+import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag, Edit2, Trash2 } from 'lucide-react';
 
 export default function Dispositivos({ config, onDataChange }) {
   const [dispositivos, setDispositivos] = useState([]);
@@ -9,10 +9,11 @@ export default function Dispositivos({ config, onDataChange }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
-  const [formData, setFormData] = useState({
+  const initialForm = {
     modelo: '',
     color: '',
     capacidad: '128GB',
@@ -26,7 +27,9 @@ export default function Dispositivos({ config, onDataChange }) {
     afectar_cc: true,
     estado: 'En Stock',
     detalles: ''
-  });
+  };
+
+  const [formData, setFormData] = useState(initialForm);
 
   useEffect(() => {
     fetchDispositivos();
@@ -48,11 +51,53 @@ export default function Dispositivos({ config, onDataChange }) {
     }
   };
 
+  const handleOpenCreate = () => {
+    setEditingId(null);
+    setFormData(initialForm);
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (d) => {
+    setEditingId(d.id);
+    setFormData({
+      modelo: d.modelo || '',
+      color: d.color || '',
+      capacidad: d.capacidad || '128GB',
+      bateria: d.bateria || 100,
+      imei: d.imei || '',
+      condicion: d.condicion || 'Usado Impecable',
+      costo_usd: d.costo_usd !== undefined ? d.costo_usd : '',
+      costo_reparacion_usd: d.costo_reparacion_usd !== undefined ? d.costo_reparacion_usd : '',
+      precio_sugerido_usd: d.precio_sugerido_usd !== undefined ? d.precio_sugerido_usd : '',
+      proveedor: d.proveedor || 'Garden',
+      afectar_cc: false,
+      estado: d.estado || 'En Stock',
+      detalles: d.detalles || ''
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id, modelo) => {
+    if (!window.confirm(`¿Estás seguro de eliminar el equipo "${modelo}"?`)) return;
+    try {
+      const res = await fetch(`/api/dispositivos/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchDispositivos();
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      console.error("Error al eliminar dispositivo:", err);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await fetch('/api/dispositivos', {
-        method: 'POST',
+      const url = editingId ? `/api/dispositivos/${editingId}` : '/api/dispositivos';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
@@ -62,13 +107,16 @@ export default function Dispositivos({ config, onDataChange }) {
           precio_sugerido_pesos: (parseFloat(formData.precio_sugerido_usd) || 0) * dolarCotiz
         })
       });
+
       if (res.ok) {
         setShowModal(false);
+        setEditingId(null);
+        setFormData(initialForm);
         fetchDispositivos();
         if (onDataChange) onDataChange();
       }
     } catch (err) {
-      console.error("Error al registrar dispositivo:", err);
+      console.error("Error al guardar dispositivo:", err);
     }
   };
 
@@ -93,11 +141,11 @@ export default function Dispositivos({ config, onDataChange }) {
             Stock de Celulares y Equipos
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Gestión individual de iPhones, Samsungs y dispositivos por IMEI, batería, costo y proveedor.
+            Gestión individual de iPhones, Samsungs y dispositivos por IMEI, batería, costo, precios y proveedor.
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpenCreate}
           className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center gap-2 text-sm justify-center"
         >
           <Plus className="w-4 h-4" />
@@ -192,22 +240,46 @@ export default function Dispositivos({ config, onDataChange }) {
                   )}
                 </div>
 
-                {/* Precios & Proveedor */}
-                <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
-                  <div>
-                    <div className="text-[10px] text-slate-500 uppercase">Costo Base</div>
-                    <div className="text-sm font-bold text-slate-300 font-mono">${d.costo_usd} USD</div>
-                    {d.costo_reparacion_usd > 0 && (
-                      <div className="text-[10px] text-amber-400 font-mono">+${d.costo_reparacion_usd} rep</div>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[10px] text-slate-500 uppercase">PVP Sugerido</div>
-                    <div className="text-base font-bold text-emerald-400 font-mono">
-                      ${d.precio_sugerido_usd} USD
+                {/* Precios, Proveedor y Acciones */}
+                <div>
+                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+                    <div>
+                      <div className="text-[10px] text-slate-500 uppercase">Costo Base</div>
+                      <div className="text-sm font-bold text-slate-300 font-mono">${d.costo_usd} USD</div>
+                      {d.costo_reparacion_usd > 0 && (
+                        <div className="text-[10px] text-amber-400 font-mono">+${d.costo_reparacion_usd} rep</div>
+                      )}
                     </div>
-                    <div className="text-[10px] text-slate-400">
-                      ~${(d.precio_sugerido_usd * dolarCotiz).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                    <div className="text-right">
+                      <div className="text-[10px] text-slate-500 uppercase">PVP Sugerido</div>
+                      <div className="text-base font-bold text-emerald-400 font-mono">
+                        ${d.precio_sugerido_usd} USD
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        ~${(d.precio_sugerido_usd * dolarCotiz).toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 pt-3 border-t border-slate-800/60 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400">Prov: <strong className="text-slate-300">{d.proveedor || 'Sin Prov.'}</strong></span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleOpenEdit(d)}
+                        className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 px-2.5 py-1 rounded-lg transition"
+                        title="Editar Stock / Precio"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => handleDelete(d.id, d.modelo)}
+                        className="flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 px-2.5 py-1 rounded-lg transition"
+                        title="Eliminar de inventario"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Borrar
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -217,14 +289,14 @@ export default function Dispositivos({ config, onDataChange }) {
         </div>
       )}
 
-      {/* Modal Nuevo Dispositivo */}
+      {/* Modal Alta / Edición Dispositivo */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-xl w-full max-h-[90vh] overflow-y-auto p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Smartphone className="w-5 h-5 text-indigo-400" />
-                Ingresar Equipo al Inventario
+                {editingId ? 'Editar Celular / Precios' : 'Ingresar Equipo al Inventario'}
               </h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
             </div>
@@ -372,22 +444,25 @@ export default function Dispositivos({ config, onDataChange }) {
                     <option value="En Stock">En Stock</option>
                     <option value="Señado">Señado</option>
                     <option value="En Taller">En Taller</option>
+                    <option value="Vendido">Vendido</option>
                   </select>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2 p-2 bg-slate-800/40 rounded-xl">
-                <input
-                  type="checkbox"
-                  id="afectar_cc"
-                  checked={formData.afectar_cc}
-                  onChange={e => setFormData({ ...formData, afectar_cc: e.target.checked })}
-                  className="rounded bg-slate-700 text-indigo-600 focus:ring-0"
-                />
-                <label htmlFor="afectar_cc" className="text-xs text-slate-300">
-                  Añadir automáticamente el costo a la <strong>Cuenta Corriente de {formData.proveedor}</strong>
-                </label>
-              </div>
+              {!editingId && (
+                <div className="flex items-center gap-2 p-2 bg-slate-800/40 rounded-xl">
+                  <input
+                    type="checkbox"
+                    id="afectar_cc"
+                    checked={formData.afectar_cc}
+                    onChange={e => setFormData({ ...formData, afectar_cc: e.target.checked })}
+                    className="rounded bg-slate-700 text-indigo-600 focus:ring-0"
+                  />
+                  <label htmlFor="afectar_cc" className="text-xs text-slate-300">
+                    Añadir automáticamente el costo a la <strong>Cuenta Corriente de {formData.proveedor}</strong>
+                  </label>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Notas / Detalles Técnicos</label>
@@ -403,7 +478,7 @@ export default function Dispositivos({ config, onDataChange }) {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
                 <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-lg shadow-indigo-600/30">
-                  Guardar en Stock
+                  {editingId ? 'Guardar Cambios' : 'Guardar en Stock'}
                 </button>
               </div>
             </form>
