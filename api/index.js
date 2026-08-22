@@ -433,6 +433,12 @@ app.put("/api/inventario/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+app.delete("/api/inventario/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  memStore.inventario_items = (memStore.inventario_items || []).filter(i => i.id !== id);
+  res.json({ success: true });
+});
+
 app.get("/api/reparaciones", async (req, res) => {
   try {
     const r = await q("SELECT * FROM reparaciones ORDER BY id");

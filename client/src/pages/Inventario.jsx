@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Package, Plus, Search, AlertCircle, Tag, CheckCircle2 } from 'lucide-react';
+import { Package, Plus, Search, AlertCircle, Tag, CheckCircle2, Edit2, Trash2 } from 'lucide-react';
 
 export default function Inventario({ config, onDataChange }) {
   const [items, setItems] = useState([]);
@@ -8,10 +8,11 @@ export default function Inventario({ config, onDataChange }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState(null);
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
-  const [formData, setFormData] = useState({
+  const initialForm = {
     categoria: 'Accesorio',
     nombre: '',
     stock_actual: '',
@@ -21,7 +22,9 @@ export default function Inventario({ config, onDataChange }) {
     precio_venta_pesos: '',
     precio_venta_usd: '',
     ubicacion: 'Local'
-  });
+  };
+
+  const [formData, setFormData] = useState(initialForm);
 
   useEffect(() => {
     fetchInventario();
@@ -34,9 +37,45 @@ export default function Inventario({ config, onDataChange }) {
       const data = await res.json();
       setItems(data || []);
     } catch (err) {
-      console.warn("Using fallback inventario:", err); setItems(fallbackData.inventario_items || []);
+      console.warn("Using fallback inventario:", err);
+      setItems(fallbackData.inventario_items || []);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenCreate = () => {
+    setEditingId(null);
+    setFormData(initialForm);
+    setShowModal(true);
+  };
+
+  const handleOpenEdit = (item) => {
+    setEditingId(item.id);
+    setFormData({
+      categoria: item.categoria || 'Accesorio',
+      nombre: item.nombre || '',
+      stock_actual: item.stock_actual !== undefined ? item.stock_actual : '',
+      stock_minimo: item.stock_minimo !== undefined ? item.stock_minimo : '5',
+      costo_pesos: item.costo_pesos !== undefined ? item.costo_pesos : '',
+      costo_usd: item.costo_usd !== undefined ? item.costo_usd : '',
+      precio_venta_pesos: item.precio_venta_pesos !== undefined ? item.precio_venta_pesos : '',
+      precio_venta_usd: item.precio_venta_usd !== undefined ? item.precio_venta_usd : '',
+      ubicacion: item.ubicacion || 'Local'
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id, nombre) => {
+    if (!window.confirm(`¿Estás seguro de eliminar el artículo "${nombre}" del inventario?`)) return;
+    try {
+      const res = await fetch(`/api/inventario/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        fetchInventario();
+        if (onDataChange) onDataChange();
+      }
+    } catch (err) {
+      console.error("Error al eliminar artículo:", err);
     }
   };
 
@@ -44,9 +83,9 @@ export default function Inventario({ config, onDataChange }) {
     e.preventDefault();
     try {
       const cPesos = parseFloat(formData.costo_pesos) || 0;
-      const cUSD = parseFloat(formData.costo_usd) || (cPesos / dolarCotiz);
+      const cUSD = parseFloat(formData.costo_usd) || (cPesos > 0 ? cPesos / dolarCotiz : 0);
       const pPesos = parseFloat(formData.precio_venta_pesos) || 0;
-      const pUSD = parseFloat(formData.precio_venta_usd) || (pPesos / dolarCotiz);
+      const pUSD = parseFloat(formData.precio_venta_usd) || (pPesos > 0 ? pPesos / dolarCotiz : 0);
 
       const payload = {
         ...formData,
@@ -58,13 +97,19 @@ export default function Inventario({ config, onDataChange }) {
         precio_venta_usd: pUSD
       };
 
-      const res = await fetch('/api/inventario', {
-        method: 'POST',
+      const url = editingId ? `/api/inventario/${editingId}` : '/api/inventario';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+
       if (res.ok) {
         setShowModal(false);
+        setEditingId(null);
+        setFormData(initialForm);
         fetchInventario();
         if (onDataChange) onDataChange();
       }
@@ -89,11 +134,11 @@ export default function Inventario({ config, onDataChange }) {
             Accesorios & Repuestos
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Control de stock de cargadores, fundas, cables, templados, baterías y repuestos.
+            Control de stock, modificación de precios y edición de cargadores, fundas, cables, templados, baterías y repuestos.
           </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
+          onClick={handleOpenCreate}
           className="bg-sky-600 hover:bg-sky-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-sky-600/30 transition flex items-center gap-2 text-sm justify-center"
         >
           <Plus className="w-4 h-4" />
@@ -148,6 +193,7 @@ export default function Inventario({ config, onDataChange }) {
                   <th className="py-3 px-4 text-right">Costo Unit.</th>
                   <th className="py-3 px-4 text-right">PVP Sugerido</th>
                   <th className="py-3 px-4">Ubicación</th>
+                  <th className="py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -169,13 +215,31 @@ export default function Inventario({ config, onDataChange }) {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right font-mono text-slate-400">
-                        ${item.costo_pesos > 0 ? `$${item.costo_pesos.toLocaleString('es-AR')} ARS` : `$${item.costo_usd} USD`}
+                        {item.costo_pesos > 0 ? `$${item.costo_pesos.toLocaleString('es-AR')} ARS` : `$${item.costo_usd} USD`}
                       </td>
-                      <td className="py-3 px-4 text-right font-mono font-bold text-white">
-                        ${item.precio_venta_pesos > 0 ? `$${item.precio_venta_pesos.toLocaleString('es-AR')} ARS` : `$${item.precio_venta_usd} USD`}
+                      <td className="py-3 px-4 text-right font-mono font-bold text-emerald-400">
+                        {item.precio_venta_pesos > 0 ? `$${item.precio_venta_pesos.toLocaleString('es-AR')} ARS` : `$${item.precio_venta_usd} USD`}
                       </td>
                       <td className="py-3 px-4 text-slate-400 text-xs">
                         {item.ubicacion || 'Local'}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-lg bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 transition"
+                            title="Editar Stock / Precios"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id, item.nombre)}
+                            className="p-1.5 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 transition"
+                            title="Eliminar de inventario"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -186,14 +250,14 @@ export default function Inventario({ config, onDataChange }) {
         )}
       </div>
 
-      {/* Modal Alta Artículo */}
+      {/* Modal Alta / Edición Artículo */}
       {showModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
                 <Package className="w-5 h-5 text-sky-400" />
-                Nuevo Artículo
+                {editingId ? 'Editar Artículo / Precios' : 'Nuevo Artículo'}
               </h2>
               <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
@@ -238,7 +302,7 @@ export default function Inventario({ config, onDataChange }) {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Stock Inicial *</label>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Stock Actual *</label>
                   <input
                     type="number"
                     required
@@ -262,12 +326,12 @@ export default function Inventario({ config, onDataChange }) {
 
               <div className="grid grid-cols-2 gap-3 bg-slate-800/40 p-3 rounded-xl border border-slate-800">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Costo Unitario ($ ARS)</label>
+                  <label className="block text-xs text-slate-400 mb-1">Costo Unitario ($ ARS / USD)</label>
                   <input
                     type="number"
                     step="any"
-                    value={formData.costo_pesos}
-                    onChange={e => setFormData({ ...formData, costo_pesos: e.target.value })}
+                    value={formData.costo_pesos || formData.costo_usd}
+                    onChange={e => setFormData({ ...formData, costo_pesos: e.target.value, costo_usd: parseFloat(e.target.value)/dolarCotiz })}
                     placeholder="0.00"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white font-mono"
                   />
@@ -278,7 +342,7 @@ export default function Inventario({ config, onDataChange }) {
                     type="number"
                     step="any"
                     value={formData.precio_venta_pesos}
-                    onChange={e => setFormData({ ...formData, precio_venta_pesos: e.target.value })}
+                    onChange={e => setFormData({ ...formData, precio_venta_pesos: e.target.value, precio_venta_usd: parseFloat(e.target.value)/dolarCotiz })}
                     placeholder="0.00"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white font-mono font-bold text-emerald-400"
                   />
@@ -288,7 +352,7 @@ export default function Inventario({ config, onDataChange }) {
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
                 <button type="submit" className="bg-sky-600 hover:bg-sky-500 text-white font-semibold px-5 py-2 rounded-xl text-sm">
-                  Guardar Artículo
+                  {editingId ? 'Guardar Cambios' : 'Guardar Artículo'}
                 </button>
               </div>
             </form>

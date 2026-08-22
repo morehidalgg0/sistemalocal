@@ -450,6 +450,14 @@ router.put('/inventario/:id', (req, res) => {
   }
 });
 
+router.delete('/inventario/:id', (req, res) => {
+  const store = db.getInMemoryDB();
+  const id = parseInt(req.params.id);
+  store.inventario_items = (store.inventario_items || []).filter(i => i.id !== id);
+  db.saveJsonStore();
+  res.json({ success: true });
+});
+
 // Rutas de Reparaciones
 router.get('/reparaciones', (req, res) => {
   const store = db.getInMemoryDB();
