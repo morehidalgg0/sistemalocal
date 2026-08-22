@@ -54,8 +54,11 @@ app.get("/api/config", async (req, res) => {
   try {
     const r = await q("SELECT id, valor FROM configuracion");
     const config = {};
-    r.rows.forEach(row => { config[row.id] = row.valor; });
-    res.json({ config, isPostgresReady: true });
+    if (r.rows && r.rows.length > 0) {
+      r.rows.forEach(row => { config[row.id] = row.valor; });
+      return res.json({ config, isPostgresReady: true });
+    }
+    return res.json({ config: memStore.configuracion, isPostgresReady: false });
   } catch (e) {
     res.json({ config: memStore.configuracion, isPostgresReady: false });
   }
@@ -83,7 +86,7 @@ app.get("/api/dashboard", async (req, res) => {
     conf.rows.forEach(r => { config[r.id] = r.valor; });
     const dolar = parseFloat(config.dolar_blue || 1480);
 
-    const stockDisp = await q("SELECT COALESCE(SUM(costo_usd),0) as total FROM dispositivos WHERE estado = \x27En Stock\x27");
+    const stockDisp = await q("SELECT COALESCE(SUM(costo_usd),0) as total FROM dispositivos WHERE estado = 'En Stock'");
     const stockAcc = await q("SELECT COALESCE(SUM(costo_usd * stock_actual),0) as total FROM inventario_items");
     const cajas = await q("SELECT moneda, saldo_actual FROM cuentas_caja");
     let saldoUSD = 0, saldoARS = 0;
@@ -97,14 +100,17 @@ app.get("/api/dashboard", async (req, res) => {
     const totalVendidos = ventas.rows.length;
     const promedio = totalVendidos > 0 ? gananciaMes / totalVendidos : 0;
 
-    const deudores = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo=\x27DEUDOR\x27 AND estado!=\x27Cancelado\x27");
-    const deudas = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo=\x27DEUDA\x27 AND estado!=\x27Cancelado\x27");
-    const ccProv = await q("SELECT COALESCE(SUM(saldo_adeudado),0) as total FROM entidades_cc WHERE tipo=\x27PROVEEDOR\x27");
-
-    const dispEnStock = await q("SELECT COUNT(*) as c FROM dispositivos WHERE estado=\x27En Stock\x27");
-    const repActivas = await q("SELECT COUNT(*) as c FROM reparaciones WHERE estado != \x27Entregado y Cobrado\x27");
+    const deudores = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo='DEUDOR' AND estado!='Cancelado'");
+    const deudas = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo='DEUDA' AND estado!='Cancelado'");
+    const ccProv = await q("SELECT COALESCE(SUM(saldo_adeudado),0) as total FROM entidades_cc WHERE tipo='PROVEEDOR'");
+    const dispEnStock = await q("SELECT COUNT(*) as c FROM dispositivos WHERE estado = 'En Stock'");
+    const repActivas = await q("SELECT COUNT(*) as c FROM reparaciones WHERE estado != 'Entregado y Cobrado'");
     const ultimasVentas = await q("SELECT * FROM ventas ORDER BY id DESC LIMIT 5");
     const ultimosMovs = await q("SELECT * FROM caja_movimientos ORDER BY id DESC LIMIT 6");
+
+    if (totalVendidos === 0 && (memStore.ventas || []).length > 0) {
+      throw new Error("EMPTY_POSTGRES_FALLBACK");
+    }
 
     res.json({
       kpis: {
@@ -183,7 +189,8 @@ app.get("/api/dashboard", async (req, res) => {
 app.get("/api/dispositivos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM dispositivos ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.dispositivos || []);
   } catch (e) {
     res.json(memStore.dispositivos || []);
   }
@@ -234,7 +241,8 @@ app.delete("/api/dispositivos/:id", async (req, res) => {
 app.get("/api/ventas", async (req, res) => {
   try {
     const r = await q("SELECT * FROM ventas ORDER BY id DESC");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.ventas || []);
   } catch (e) {
     res.json(memStore.ventas || []);
   }
@@ -311,7 +319,8 @@ app.post("/api/ventas", async (req, res) => {
 app.get("/api/cajas", async (req, res) => {
   try {
     const r = await q("SELECT * FROM cuentas_caja ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.cuentas_caja || []);
   } catch (e) {
     res.json(memStore.cuentas_caja || []);
   }
@@ -320,7 +329,8 @@ app.get("/api/cajas", async (req, res) => {
 app.get("/api/cajas/movimientos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM caja_movimientos ORDER BY id DESC");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.caja_movimientos || []);
   } catch (e) {
     res.json(memStore.caja_movimientos || []);
   }
@@ -356,7 +366,8 @@ app.post("/api/cajas/movimientos", async (req, res) => {
 app.get("/api/cuentas-corrientes", async (req, res) => {
   try {
     const r = await q("SELECT * FROM entidades_cc ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.entidades_cc || []);
   } catch (e) {
     res.json(memStore.entidades_cc || []);
   }
@@ -398,7 +409,8 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
 app.get("/api/inventario", async (req, res) => {
   try {
     const r = await q("SELECT * FROM inventario_items ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.inventario_items || []);
   } catch (e) {
     res.json(memStore.inventario_items || []);
   }
@@ -442,7 +454,8 @@ app.delete("/api/inventario/:id", async (req, res) => {
 app.get("/api/reparaciones", async (req, res) => {
   try {
     const r = await q("SELECT * FROM reparaciones ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.reparaciones || []);
   } catch (e) {
     res.json(memStore.reparaciones || []);
   }
@@ -488,7 +501,8 @@ app.put("/api/reparaciones/:id", async (req, res) => {
 app.get("/api/gastos-fijos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM gastos_fijos ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.gastos_fijos || []);
   } catch (e) {
     res.json(memStore.gastos_fijos || []);
   }
@@ -512,7 +526,8 @@ app.post("/api/gastos-fijos", async (req, res) => {
 app.get("/api/deudas-deudores", async (req, res) => {
   try {
     const r = await q("SELECT * FROM deudas_deudores ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.deudas_deudores || []);
   } catch (e) {
     res.json(memStore.deudas_deudores || []);
   }
@@ -537,7 +552,8 @@ app.post("/api/deudas-deudores", async (req, res) => {
 app.get("/api/inversiones", async (req, res) => {
   try {
     const r = await q("SELECT * FROM inversiones ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.inversiones || []);
   } catch (e) {
     res.json(memStore.inversiones || []);
   }
@@ -560,7 +576,8 @@ app.post("/api/inversiones", async (req, res) => {
 app.get("/api/vendedores", async (req, res) => {
   try {
     const r = await q("SELECT * FROM vendedores ORDER BY id");
-    res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    return res.json(memStore.vendedores || []);
   } catch (e) {
     res.json(memStore.vendedores || []);
   }

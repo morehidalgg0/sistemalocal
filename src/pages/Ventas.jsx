@@ -45,18 +45,27 @@ export default function Ventas({ config, onDataChange }) {
     try {
       setLoading(true);
       const [resVentas, resDisp, resVend, resCajas] = await Promise.all([
-        fetch('/api/ventas').then(r => r.json()),
-        fetch('/api/dispositivos').then(r => r.json()),
-        fetch('/api/vendedores').then(r => r.json()),
-        fetch('/api/cajas').then(r => r.json())
+        fetch('/api/ventas').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/dispositivos').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/vendedores').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/cajas').then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
-      setVentas(resVentas || []);
-      // Filtrar solo los que están disponibles para venta
-      setDispositivosStock((resDisp || []).filter(d => d.estado === 'En Stock' || d.estado === 'Señado'));
-      setVendedores(resVend || []);
-      setCajas(resCajas || []);
+
+      const v = (resVentas && Array.isArray(resVentas) && resVentas.length > 0) ? resVentas : (fallbackData.ventas || []);
+      const d = (resDisp && Array.isArray(resDisp) && resDisp.length > 0) ? resDisp : (fallbackData.dispositivos || []);
+      const vend = (resVend && Array.isArray(resVend) && resVend.length > 0) ? resVend : (fallbackData.vendedores || []);
+      const c = (resCajas && Array.isArray(resCajas) && resCajas.length > 0) ? resCajas : (fallbackData.cuentas_caja || []);
+
+      setVentas(v);
+      setDispositivosStock(d.filter(item => item.estado === 'En Stock' || item.estado === 'Señado'));
+      setVendedores(vend);
+      setCajas(c);
     } catch (err) {
       console.error("Error fetching data:", err);
+      setVentas(fallbackData.ventas || []);
+      setDispositivosStock((fallbackData.dispositivos || []).filter(item => item.estado === 'En Stock' || item.estado === 'Señado'));
+      setVendedores(fallbackData.vendedores || []);
+      setCajas(fallbackData.cuentas_caja || []);
     } finally {
       setLoading(false);
     }
