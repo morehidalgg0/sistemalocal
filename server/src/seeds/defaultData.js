@@ -1266,14 +1266,6 @@ module.exports = {
         "detalles": "12 Pro Azul 256GB"
     }
 ],
-  gastos_fijos: [
-    { id: 1, concepto: "Alquiler Oficina Rioja (2B)", persona_responsable: "Inmobiliaria", monto: 550, moneda: "USD", dia_vencimiento: 10, pagado: false },
-    { id: 2, concepto: "Sueldos Personal", persona_responsable: "Equipo", monto: 1200, moneda: "USD", dia_vencimiento: 5, pagado: false },
-    { id: 3, concepto: "Servicios Falucho", persona_responsable: "Administración", monto: 85000, moneda: "PESOS", dia_vencimiento: 15, pagado: false },
-    { id: 4, concepto: "Luz Oficina Rioja", persona_responsable: "Edesur / Edea", monto: 65000, moneda: "PESOS", dia_vencimiento: 20, pagado: false },
-    { id: 5, concepto: "Internet Starlink", persona_responsable: "Starlink", monto: 56000, moneda: "PESOS", dia_vencimiento: 1, pagado: true },
-    { id: 6, concepto: "Monotributo + Honorarios Contador", persona_responsable: "Estudio Contable", monto: 95000, moneda: "PESOS", dia_vencimiento: 20, pagado: false }
-  ],
   deudas_deudores: [
     { id: 1, tipo: "DEUDOR", persona: "German Falcone", concepto: "Diferencia préstamo / equipo", monto_original: 99, monto_pendiente: 99, moneda: "USD", estado: "Pendiente" },
     { id: 2, tipo: "DEUDOR", persona: "Dario Mecánico", concepto: "Equipos entregados", monto_original: 285, monto_pendiente: 285, moneda: "USD", estado: "Pendiente" },
