@@ -23,12 +23,35 @@ import CuentasCorrientes from "./pages/CuentasCorrientes";
 import GastosFinanzas from "./pages/GastosFinanzas";
 import fallbackData from "./data/fallbackData";
 
+// Última cotización conocida guardada en el navegador para evitar el salto a 1480
+const DOLAR_CACHE_KEY = "newpoint_dolar_blue";
+
+function getDolarCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(DOLAR_CACHE_KEY));
+    return c && parseFloat(c.venta) > 0 ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveDolarCache(info) {
+  try {
+    if (info && parseFloat(info.venta) > 0) {
+      localStorage.setItem(DOLAR_CACHE_KEY, JSON.stringify({ venta: info.venta, actualizado: info.actualizado, fuente: info.fuente }));
+    }
+  } catch {}
+}
+
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
-  const [config, setConfig] = useState(fallbackData.configuracion);
-  const [dolarInfo, setDolarInfo] = useState({ venta: null, actualizado: null, fuente: null });
+  const [config, setConfig] = useState(() => {
+    const c = getDolarCache();
+    return c ? { ...fallbackData.configuracion, dolar_blue: String(c.venta) } : fallbackData.configuracion;
+  });
+  const [dolarInfo, setDolarInfo] = useState(() => getDolarCache() || { venta: null, actualizado: null, fuente: null });
   const [actualizandoDolar, setActualizandoDolar] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -86,11 +109,15 @@ export default function App() {
 
   const fetchGlobalData = async () => {
     try {
-      const [resDash, resConf] = await Promise.all([
+      const [resDashRaw, resConf] = await Promise.all([
         fetch("/api/dashboard").then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/config").then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
-      if (resDash && resDash.kpis) {
+      if (resDashRaw && resDashRaw.kpis) {
+        const cache = getDolarCache();
+        const resDash = cache
+          ? { ...resDashRaw, kpis: { ...resDashRaw.kpis, dolarActual: parseFloat(cache.venta) } }
+          : resDashRaw;
         setDashboardData(resDash);
       } else {
         setDashboardData(calculateFallbackDashboard());
@@ -114,8 +141,10 @@ export default function App() {
     try {
       const r = await fetch("/api/dolar").then(r => r.ok ? r.json() : null).catch(() => null);
       if (r && r.venta) {
+        saveDolarCache(r);
         setDolarInfo(r);
         setConfig(prev => ({ ...prev, dolar_blue: String(r.venta) }));
+        setDashboardData(prev => prev ? { ...prev, kpis: { ...prev.kpis, dolarActual: parseFloat(r.venta) } } : prev);
       }
     } catch (err) {
       console.warn("No se pudo obtener cotización del dólar:", err);
@@ -129,8 +158,11 @@ export default function App() {
     try {
       const r = await fetch("/api/dolar/refresh", { method: "POST" }).then(r => r.ok ? r.json() : null).catch(() => null);
       if (r && r.success) {
-        setDolarInfo({ venta: r.venta, actualizado: r.actualizado, fuente: r.fuente });
+        const info = { venta: r.venta, actualizado: r.actualizado, fuente: r.fuente };
+        saveDolarCache(info);
+        setDolarInfo(info);
         setConfig(prev => ({ ...prev, dolar_blue: String(r.venta) }));
+        setDashboardData(prev => prev ? { ...prev, kpis: { ...prev.kpis, dolarActual: parseFloat(r.venta) } } : prev);
         fetchGlobalData();
       }
     } finally {
