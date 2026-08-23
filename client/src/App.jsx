@@ -9,7 +9,8 @@ import {
   Users, 
   CreditCard,
   Menu, 
-  X 
+  X,
+  RefreshCw
 } from "lucide-react";
 
 import Dashboard from "./pages/Dashboard";
@@ -27,6 +28,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [config, setConfig] = useState(fallbackData.configuracion);
+  const [dolarInfo, setDolarInfo] = useState({ venta: null, actualizado: null, fuente: null });
+  const [actualizandoDolar, setActualizandoDolar] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const calculateFallbackDashboard = () => {
@@ -106,8 +109,38 @@ export default function App() {
     }
   };
 
+  // Trae la cotización guardada; el backend la refresca solo si tiene +12hs
+  const fetchDolar = async () => {
+    try {
+      const r = await fetch("/api/dolar").then(r => r.ok ? r.json() : null).catch(() => null);
+      if (r && r.venta) {
+        setDolarInfo(r);
+        setConfig(prev => ({ ...prev, dolar_blue: String(r.venta) }));
+      }
+    } catch (err) {
+      console.warn("No se pudo obtener cotización del dólar:", err);
+    }
+  };
+
+  // Actualización manual desde InfoDolar Mar del Plata
+  const actualizarDolarManual = async () => {
+    if (actualizandoDolar) return;
+    setActualizandoDolar(true);
+    try {
+      const r = await fetch("/api/dolar/refresh", { method: "POST" }).then(r => r.ok ? r.json() : null).catch(() => null);
+      if (r && r.success) {
+        setDolarInfo({ venta: r.venta, actualizado: r.actualizado, fuente: r.fuente });
+        setConfig(prev => ({ ...prev, dolar_blue: String(r.venta) }));
+        fetchGlobalData();
+      }
+    } finally {
+      setTimeout(() => setActualizandoDolar(false), 600);
+    }
+  };
+
   useEffect(() => {
     fetchGlobalData();
+    fetchDolar();
   }, []);
 
   const navItems = [
@@ -218,10 +251,22 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-4 text-xs font-mono">
-            <div className="hidden sm:flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
-              <span>Dólar Blue:</span>
-              <strong className="text-emerald-400">${config?.dolar_blue || "1480"}</strong>
-            </div>
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
+            <span>Dólar Blue:</span>
+            <strong className="text-emerald-400">${config?.dolar_blue || "1480"}</strong>
+            <button
+              onClick={actualizarDolarManual}
+              title={
+                dolarInfo?.actualizado
+                  ? `Fuente: ${dolarInfo.fuente || "InfoDolar MDP"} • Últ. act.: ${new Date(dolarInfo.actualizado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+                  : "Actualizar cotización (InfoDolar Mar del Plata)"
+              }
+              className="text-slate-500 hover:text-emerald-400 transition-colors disabled:opacity-50"
+              disabled={actualizandoDolar}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${actualizandoDolar ? "animate-spin text-sky-400" : ""}`} />
+            </button>
+          </div>
           </div>
         </header>
 
@@ -231,6 +276,7 @@ export default function App() {
             <Dashboard 
               data={dashboardData} 
               config={config} 
+              dolarInfo={dolarInfo}
               onNavigate={(tab) => setActiveTab(tab)} 
             />
           )}

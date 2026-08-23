@@ -12,9 +12,10 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-export default function Dashboard({ data, config, onNavigate }) {
+export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
   const kpis = data?.kpis || {};
   const dolar = kpis.dolarActual || 1480;
+  const fuenteDolar = dolarInfo?.fuente || "InfoDolar Mar del Plata";
 
   return (
     <div className="space-y-6">
@@ -34,8 +35,13 @@ export default function Dashboard({ data, config, onNavigate }) {
               <DollarSign className="w-5 h-5" />
             </div>
             <div>
-              <div className="text-xs text-slate-400 font-medium">Dólar Blue Hoy</div>
+              <div className="text-xs text-slate-400 font-medium">Dólar Blue Hoy (Venta)</div>
               <div className="text-lg font-bold text-emerald-400">${dolar.toLocaleString('es-AR')}</div>
+              <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                {fuenteDolar}
+                {dolarInfo?.actualizado && ` • ${new Date(dolarInfo.actualizado).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`}
+              </div>
             </div>
           </div>
           <button 

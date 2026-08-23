@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 const excelData = require('../seeds/excelData');
+const { fetchDolarBlueMdp, obtenerDolarActual } = require('../services/dolarService');
 
 // Inicializar datos en el almacén local si están vacíos o recién iniciados
 function checkAndSeed() {
@@ -29,6 +30,71 @@ router.post('/config', (req, res) => {
   store.configuracion = { ...store.configuracion, ...req.body };
   db.saveJsonStore();
   res.json({ success: true, config: store.configuracion });
+});
+
+// ----------------------------------------------------
+// 1.1 DÓLAR BLUE MAR DEL PLATA (InfoDolar)
+// ----------------------------------------------------
+async function guardarDolar(fresh) {
+  const store = db.getInMemoryDB();
+  store.configuracion = {
+    ...store.configuracion,
+    dolar_blue: String(fresh.venta),
+    dolar_blue_compra: fresh.compra != null ? String(fresh.compra) : '',
+    dolar_blue_actualizado: new Date().toISOString(),
+    dolar_blue_fuente: fresh.fuente || 'InfoDolar Mar del Plata'
+  };
+  db.saveJsonStore();
+  return store.configuracion;
+}
+
+function respuestaDolar(res, extra = {}) {
+  const c = db.getInMemoryDB().configuracion || {};
+  return res.json({
+    venta: parseFloat(c.dolar_blue) || 1480,
+    compra: c.dolar_blue_compra ? parseFloat(c.dolar_blue_compra) : null,
+    actualizado: c.dolar_blue_actualizado || null,
+    fuente: c.dolar_blue_fuente || 'InfoDolar Mar del Plata',
+    ...extra
+  });
+}
+
+router.get('/dolar', async (req, res) => {
+  try {
+    const store = db.getInMemoryDB();
+    const resultado = await obtenerDolarActual(store.configuracion);
+    if (resultado.actualizadoAhora) {
+      await guardarDolar(resultado);
+      return respuestaDolar(res, { autoActualizado: true });
+    }
+    return res.json({
+      venta: resultado.venta,
+      compra: resultado.compra,
+      actualizado: resultado.fechaActualizacion,
+      fuente: resultado.fuente,
+      autoActualizado: false
+    });
+  } catch (e) {
+    console.warn('GET /api/dolar error:', e.message);
+    return respuestaDolar(res, { autoActualizado: false, error: e.message });
+  }
+});
+
+router.post('/dolar/refresh', async (req, res) => {
+  try {
+    const fresh = await fetchDolarBlueMdp();
+    const conf = await guardarDolar(fresh);
+    res.json({
+      success: true,
+      venta: fresh.venta,
+      compra: fresh.compra,
+      fuente: fresh.fuente,
+      actualizado: conf.dolar_blue_actualizado
+    });
+  } catch (e) {
+    console.warn('POST /api/dolar/refresh error:', e.message);
+    res.status(502).json({ success: false, error: 'No se pudo actualizar desde InfoDolar: ' + e.message });
+  }
 });
 
 // ----------------------------------------------------

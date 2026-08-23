@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import seedData from "./excelData.js";
+import { fetchDolarBlueMdp, obtenerDolarActual } from "./dolarService.js";
 
 dotenv.config();
 
@@ -76,6 +77,96 @@ app.post("/api/config", async (req, res) => {
     res.json({ success: true, config: memStore.configuracion });
   } catch (e) {
     res.json({ success: true, config: memStore.configuracion });
+  }
+});
+
+// ---------------- DÓLAR BLUE MAR DEL PLATA (InfoDolar) ----------------
+
+async function guardarDolar(fresh) {
+  const configUpdate = {
+    dolar_blue: String(fresh.venta),
+    dolar_blue_compra: fresh.compra != null ? String(fresh.compra) : "",
+    dolar_blue_actualizado: new Date().toISOString(),
+    dolar_blue_fuente: fresh.fuente || "InfoDolar Mar del Plata"
+  };
+  memStore.configuracion = { ...memStore.configuracion, ...configUpdate };
+  if (isPostgresAvailable) {
+    for (const [k, v] of Object.entries(configUpdate)) {
+      await q("INSERT INTO configuracion (id, valor) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET valor = $2", [k, String(v)]).catch(() => {});
+    }
+  }
+  return configUpdate;
+}
+
+function respuestaDolar(extra = {}) {
+  const c = memStore.configuracion || {};
+  return res => res.json({
+    venta: parseFloat(c.dolar_blue) || 1480,
+    compra: c.dolar_blue_compra ? parseFloat(c.dolar_blue_compra) : null,
+    actualizado: c.dolar_blue_actualizado || null,
+    fuente: c.dolar_blue_fuente || "InfoDolar Mar del Plata",
+    ...extra
+  });
+}
+
+// Devuelve la cotización; si tiene más de 12hs, se actualiza sola desde InfoDolar
+app.get("/api/dolar", async (req, res) => {
+  try {
+    // Hidratar config desde Postgres si está disponible (arranque frío)
+    if (isPostgresAvailable) {
+      const r = await q("SELECT id, valor FROM configuracion").catch(() => null);
+      if (r && r.rows && r.rows.length > 0) {
+        const dbConf = {};
+        r.rows.forEach(row => { dbConf[row.id] = row.valor; });
+        memStore.configuracion = { ...memStore.configuracion, ...dbConf };
+      }
+    }
+    const resultado = await obtenerDolarActual(memStore.configuracion);
+    if (resultado.actualizadoAhora) {
+      await guardarDolar(resultado);
+      return respuestaDolar({ autoActualizado: true })(res);
+    }
+    return res.json({
+      venta: resultado.venta,
+      compra: resultado.compra,
+      actualizado: resultado.fechaActualizacion,
+      fuente: resultado.fuente,
+      autoActualizado: false
+    });
+  } catch (e) {
+    console.warn("GET /api/dolar error:", e.message);
+    return respuestaDolar({ autoActualizado: false, error: e.message })(res);
+  }
+});
+
+// Actualización manual desde el botón de la interfaz
+app.post("/api/dolar/refresh", async (req, res) => {
+  try {
+    const fresh = await fetchDolarBlueMdp();
+    await guardarDolar(fresh);
+    res.json({
+      success: true,
+      venta: fresh.venta,
+      compra: fresh.compra,
+      fuente: fresh.fuente,
+      actualizado: memStore.configuracion.dolar_blue_actualizado
+    });
+  } catch (e) {
+    console.warn("POST /api/dolar/refresh error:", e.message);
+    res.status(502).json({ success: false, error: "No se pudo actualizar desde InfoDolar: " + e.message });
+  }
+});
+
+// Endpoint para Vercel Cron (actualización diaria automática)
+app.get("/api/cron/dolar", async (req, res) => {
+  try {
+    const fresh = await fetchDolarBlueMdp();
+    await guardarDolar(fresh);
+    console.log(`[CRON] Dólar Blue MDP actualizado: ${fresh.venta}`);
+    res.json({ success: true, venta: fresh.venta });
+  } catch (e) {
+    console.error("[CRON] Error actualizando dólar:", e.message);
+    res.status(500).json({ success: false, error: e.message });
   }
 });
 
