@@ -399,12 +399,103 @@ app.post("/api/ventas", async (req, res) => {
         monto: monto,
         moneda: c.moneda,
         cotizacion: dolar,
-        persona_asociada: b.vendedor_nombre || "NP"
+        persona_asociada: b.vendedor_nombre || "NP",
+        comprobante_ref: "VENTA-#" + newVenta.id
       }, ...(memStore.caja_movimientos || [])];
     }
   }
 
   res.json({ success: true, venta: newVenta });
+});
+
+app.put("/api/ventas/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  const idx = (memStore.ventas || []).findIndex(v => v.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Venta no encontrada" });
+
+  const old = memStore.ventas[idx];
+  const b = req.body;
+  const dolar = parseFloat(b.cotizacion_dolar) || parseFloat(memStore.configuracion?.dolar_blue || 1480);
+  const precioUSD = parseFloat(b.precio_venta_usd) || (parseFloat(b.precio_venta_pesos) / dolar) || 0;
+  const precioPesos = parseFloat(b.precio_venta_pesos) || (precioUSD * dolar) || 0;
+  const costoUSD = parseFloat(b.costo_total_usd) || 0;
+  const costoRep = parseFloat(b.costo_reparacion) || 0;
+  const desc = parseFloat(b.descuento_monto) || 0;
+  const ganUSD = precioUSD - costoUSD - costoRep - desc;
+  const comisionPesos = parseFloat(b.comision_vendedor_pesos) || 0;
+  const comisionUSD = comisionPesos > 0 ? comisionPesos / dolar : (parseFloat(b.comision_vendedor_usd) || 0);
+
+  // Revertir impacto a caja de la venta original
+  const refVenta = `VENTA-#${old.id}`;
+  const movOriginal = (memStore.caja_movimientos || []).filter(m => m.comprobante_ref === refVenta);
+  const movsARevertir = movOriginal.length > 0
+    ? movOriginal
+    : (memStore.caja_movimientos || []).filter(m =>
+        m.categoria === "Venta" &&
+        m.cuenta_nombre === old.caja_destino &&
+        m.concepto && m.concepto.includes(old.item_detalle)
+      );
+
+  movsARevertir.forEach(m => {
+    const caja = (memStore.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
+    if (caja) caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
+  });
+  if (movsARevertir.length > 0) {
+    const refOrConcepto = (m) => m.comprobante_ref === refVenta ||
+      (m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle));
+    memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !refOrConcepto(m));
+  }
+
+  const updated = {
+    ...old,
+    item_detalle: b.item_detalle ?? old.item_detalle,
+    cliente_nombre: b.cliente_nombre ?? old.cliente_nombre,
+    cliente_contacto: b.cliente_contacto ?? old.cliente_contacto,
+    vendedor_nombre: b.vendedor_nombre ?? old.vendedor_nombre,
+    precio_venta_usd: precioUSD,
+    precio_venta_pesos: precioPesos,
+    cotizacion_dolar: dolar,
+    costo_total_usd: costoUSD,
+    costo_total_pesos: costoUSD * dolar,
+    costo_reparacion: costoRep,
+    descuentos_regalos_detalle: b.descuentos_regalos_detalle ?? old.descuentos_regalos_detalle,
+    descuento_monto: desc,
+    ganancia_usd: ganUSD,
+    ganancia_pesos: ganUSD * dolar,
+    comision_vendedor_pesos: comisionPesos,
+    comision_vendedor_usd: comisionUSD,
+    caja_destino: b.caja_destino ?? old.caja_destino,
+    metodo_pago: b.metodo_pago ?? old.metodo_pago,
+    observaciones: b.observaciones ?? old.observaciones,
+    updated_at: new Date().toISOString()
+  };
+  memStore.ventas[idx] = updated;
+
+  // Aplicar nuevo impacto a caja
+  if (b.impactar_caja !== false) {
+    const cIdx = (memStore.cuentas_caja || []).findIndex(c => c.nombre === updated.caja_destino);
+    if (cIdx !== -1) {
+      const c = memStore.cuentas_caja[cIdx];
+      const monto = c.moneda === "ARS" ? precioPesos : precioUSD;
+      c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + monto;
+      memStore.caja_movimientos = [{
+        id: Date.now(),
+        fecha: updated.fecha,
+        cuenta_id: c.id,
+        cuenta_nombre: c.nombre,
+        tipo_movimiento: "ENTRADA",
+        categoria: "Venta",
+        concepto: "Venta: " + updated.item_detalle,
+        monto: monto,
+        moneda: c.moneda,
+        cotizacion: dolar,
+        persona_asociada: updated.vendedor_nombre || "NP",
+        comprobante_ref: refVenta
+      }, ...(memStore.caja_movimientos || [])];
+    }
+  }
+
+  res.json({ success: true, venta: updated });
 });
 
 app.get("/api/cajas", async (req, res) => {

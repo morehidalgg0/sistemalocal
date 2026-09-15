@@ -332,6 +332,107 @@ router.post('/ventas', (req, res) => {
   res.json({ success: true, venta: nuevaVenta });
 });
 
+router.put('/ventas/:id', (req, res) => {
+  const store = db.getInMemoryDB();
+  const id = parseInt(req.params.id);
+  const index = (store.ventas || []).findIndex(v => v.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Venta no encontrada' });
+  }
+
+  const ventaOriginal = store.ventas[index];
+  const dolar = parseFloat(req.body.cotizacion_dolar) || parseFloat(store.configuracion?.dolar_blue || 1480);
+
+  const precioVentaUSD = parseFloat(req.body.precio_venta_usd) || (parseFloat(req.body.precio_venta_pesos) / dolar) || 0;
+  const precioVentaPesos = parseFloat(req.body.precio_venta_pesos) || (precioVentaUSD * dolar) || 0;
+
+  const costoTotalUSD = parseFloat(req.body.costo_total_usd) || 0;
+  const costoReparacionUSD = parseFloat(req.body.costo_reparacion) || 0;
+  const descuentoUSD = parseFloat(req.body.descuento_monto) || 0;
+
+  const gananciaUSD = precioVentaUSD - costoTotalUSD - costoReparacionUSD - descuentoUSD;
+  const gananciaPesos = gananciaUSD * dolar;
+
+  const comisionPesos = parseFloat(req.body.comision_vendedor_pesos) || 0;
+  const comisionUSD = comisionPesos > 0 ? comisionPesos / dolar : (parseFloat(req.body.comision_vendedor_usd) || 0);
+
+  // Revertir impacto a caja de la venta original (monto/caja/detalle como estaban)
+  const refVenta = `VENTA-#${ventaOriginal.id}`;
+  const movOriginal = (store.caja_movimientos || []).filter(m => m.comprobante_ref === refVenta);
+  const movsARevertir = movOriginal.length > 0
+    ? movOriginal
+    : (store.caja_movimientos || []).filter(m =>
+        m.categoria === 'Venta' &&
+        m.cuenta_nombre === ventaOriginal.caja_destino &&
+        m.concepto && m.concepto.includes(ventaOriginal.item_detalle)
+      );
+
+  movsARevertir.forEach(m => {
+    const caja = (store.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
+    if (caja) {
+      caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
+    }
+  });
+  if (movsARevertir.length > 0) {
+    const refOrConcepto = (m) => m.comprobante_ref === refVenta ||
+      (m.categoria === 'Venta' && m.cuenta_nombre === ventaOriginal.caja_destino && m.concepto && m.concepto.includes(ventaOriginal.item_detalle));
+    store.caja_movimientos = (store.caja_movimientos || []).filter(m => !refOrConcepto(m));
+  }
+
+  const ventaActualizada = {
+    ...ventaOriginal,
+    item_detalle: req.body.item_detalle ?? ventaOriginal.item_detalle,
+    cliente_nombre: req.body.cliente_nombre ?? ventaOriginal.cliente_nombre,
+    cliente_contacto: req.body.cliente_contacto ?? ventaOriginal.cliente_contacto,
+    vendedor_nombre: req.body.vendedor_nombre ?? ventaOriginal.vendedor_nombre,
+    precio_venta_usd: precioVentaUSD,
+    precio_venta_pesos: precioVentaPesos,
+    cotizacion_dolar: dolar,
+    costo_total_usd: costoTotalUSD,
+    costo_total_pesos: costoTotalUSD * dolar,
+    costo_reparacion: costoReparacionUSD,
+    descuentos_regalos_detalle: req.body.descuentos_regalos_detalle ?? ventaOriginal.descuentos_regalos_detalle,
+    descuento_monto: descuentoUSD,
+    ganancia_usd: gananciaUSD,
+    ganancia_pesos: gananciaPesos,
+    comision_vendedor_pesos: comisionPesos,
+    comision_vendedor_usd: comisionUSD,
+    metodo_pago: req.body.metodo_pago ?? ventaOriginal.metodo_pago,
+    caja_destino: req.body.caja_destino ?? ventaOriginal.caja_destino,
+    observaciones: req.body.observaciones ?? ventaOriginal.observaciones,
+    updated_at: new Date().toISOString()
+  };
+  store.ventas[index] = ventaActualizada;
+
+  // Aplicar nuevo impacto a caja
+  if (req.body.impactar_caja !== false) {
+    const caja = (store.cuentas_caja || []).find(c => c.nombre === ventaActualizada.caja_destino);
+    if (caja) {
+      const montoIngreso = (caja.moneda === 'ARS') ? ventaActualizada.precio_venta_pesos : ventaActualizada.precio_venta_usd;
+      caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) + montoIngreso;
+
+      store.caja_movimientos = store.caja_movimientos || [];
+      store.caja_movimientos.push({
+        id: Date.now() + 4,
+        fecha: ventaActualizada.fecha,
+        cuenta_id: caja.id,
+        cuenta_nombre: caja.nombre,
+        tipo_movimiento: 'ENTRADA',
+        categoria: 'Venta',
+        concepto: `Venta: ${ventaActualizada.item_detalle} - Cliente: ${ventaActualizada.cliente_nombre}`,
+        monto: montoIngreso,
+        moneda: caja.moneda,
+        cotizacion: dolar,
+        persona_asociada: ventaActualizada.vendedor_nombre,
+        comprobante_ref: refVenta
+      });
+    }
+  }
+
+  db.saveJsonStore();
+  res.json({ success: true, venta: ventaActualizada });
+});
+
 // Rutas de Cajas
 router.get('/cajas', (req, res) => {
   const store = db.getInMemoryDB();

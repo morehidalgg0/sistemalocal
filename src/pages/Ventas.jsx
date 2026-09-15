@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles } from 'lucide-react';
+import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil } from 'lucide-react';
 
 export default function Ventas({ config, onDataChange }) {
   const [ventas, setVentas] = useState([]);
@@ -11,6 +11,7 @@ export default function Ventas({ config, onDataChange }) {
   const [showModal, setShowModal] = useState(false);
   const [searchDispositivo, setSearchDispositivo] = useState('');
   const [tipoVenta, setTipoVenta] = useState('DISPOSITIVO'); // 'DISPOSITIVO' o 'ACCESORIO_LIBRE'
+  const [editandoVenta, setEditandoVenta] = useState(null);
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
@@ -100,6 +101,35 @@ export default function Ventas({ config, onDataChange }) {
     }));
   };
 
+  // Al editar una venta ya cargada, precargar el formulario con sus datos
+  const handleEditVenta = (v) => {
+    setTipoVenta('ACCESORIO_LIBRE');
+    setEditandoVenta(v);
+    setSearchDispositivo('');
+    setFormData({
+      dispositivo_id: v.dispositivo_id || '',
+      dispositivo_seleccionado: null,
+      item_detalle: v.item_detalle || '',
+      cliente_nombre: v.cliente_nombre || '',
+      cliente_contacto: v.cliente_contacto || '',
+      vendedor_nombre: v.vendedor_nombre || 'NP',
+      moneda_venta: 'USD',
+      precio_venta_usd: v.precio_venta_usd ?? '',
+      precio_venta_pesos: v.precio_venta_pesos ?? '',
+      cotizacion_dolar: parseFloat(v.cotizacion_dolar) || dolarCotiz,
+      costo_total_usd: v.costo_total_usd || 0,
+      costo_reparacion: v.costo_reparacion || 0,
+      descuento_monto: v.descuento_monto || 0,
+      descuentos_regalos_detalle: v.descuentos_regalos_detalle || '',
+      comision_vendedor_pesos: v.comision_vendedor_pesos || 0,
+      caja_destino: v.caja_destino || 'Caja Fuerte Dólares',
+      metodo_pago: v.metodo_pago || 'Efectivo USD',
+      impactar_caja: true,
+      observaciones: v.observaciones || ''
+    });
+    setShowModal(true);
+  };
+
   // Cálculos en vivo
   const cotizActual = parseFloat(formData.cotizacion_dolar) || dolarCotiz;
   const pUSD = parseFloat(formData.precio_venta_usd) || (parseFloat(formData.precio_venta_pesos) / cotizActual) || 0;
@@ -123,13 +153,14 @@ export default function Ventas({ config, onDataChange }) {
         ganancia_pesos: gananciaNetaPesos
       };
 
-      const res = await fetch('/api/ventas', {
-        method: 'POST',
+      const res = await fetch(editandoVenta ? `/api/ventas/${editandoVenta.id}` : '/api/ventas', {
+        method: editandoVenta ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
         setShowModal(false);
+        setEditandoVenta(null);
         // Reset form
         setFormData({
           dispositivo_id: '',
@@ -154,9 +185,14 @@ export default function Ventas({ config, onDataChange }) {
         });
         fetchVentasData();
         if (onDataChange) onDataChange();
+      } else {
+        const errText = await res.text().catch(() => '');
+        console.error("Error guardando venta:", res.status, errText);
+        alert(errText || "No se pudo guardar la venta.");
       }
     } catch (err) {
       console.error("Error guardando venta:", err);
+      alert("Error al guardar la venta. Revisá la conexión.");
     }
   };
 
@@ -183,6 +219,7 @@ export default function Ventas({ config, onDataChange }) {
         <button
           onClick={() => {
             setSearchDispositivo('');
+            setEditandoVenta(null);
             setShowModal(true);
           }}
           className="bg-sky-600 hover:bg-sky-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-sky-600/30 transition-all flex items-center gap-2 text-sm justify-center"
@@ -221,6 +258,7 @@ export default function Ventas({ config, onDataChange }) {
                   <th className="py-3 px-4 text-center">Dólar</th>
                   <th className="py-3 px-4 text-right">Ganancia Neta</th>
                   <th className="py-3 px-4">Caja Destino</th>
+                  <th className="py-3 px-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -268,6 +306,15 @@ export default function Ventas({ config, onDataChange }) {
                     <td className="py-3 px-4 text-xs text-slate-400">
                       {v.caja_destino}
                     </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        onClick={() => handleEditVenta(v)}
+                        title="Editar venta"
+                        className="p-2 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -284,14 +331,16 @@ export default function Ventas({ config, onDataChange }) {
               <div>
                 <h2 className="text-xl font-bold text-white flex items-center gap-2">
                   <TrendingUp className="w-5 h-5 text-sky-400" />
-                  Facturar Nueva Venta
+                  {editandoVenta ? 'Editar Venta' : 'Facturar Nueva Venta'}
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Selecciona el dispositivo exacto de tu stock para descontarlo y cargar sus costos automáticamente.
+                  {editandoVenta
+                    ? `Modificando la venta del ${editandoVenta.fecha ? new Date(editandoVenta.fecha).toLocaleDateString('es-AR') : '-'}. Guardá los cambios y se recalcula la ganancia y la caja destino.`
+                    : 'Selecciona el dispositivo exacto de tu stock para descontarlo y cargar sus costos automáticamente.'}
                 </p>
               </div>
               <button 
-                onClick={() => setShowModal(false)}
+                onClick={() => { setShowModal(false); setEditandoVenta(null); }}
                 className="text-slate-400 hover:text-white text-lg font-bold p-1"
               >
                 ✕
@@ -299,6 +348,16 @@ export default function Ventas({ config, onDataChange }) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Aviso de modo edición */}
+              {editandoVenta && (
+                <div className="p-2.5 bg-amber-950/40 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-amber-400 shrink-0" />
+                  <span>
+                    Editando venta #{editandoVenta.id}. Podés corregir cliente, vendedor, precios, costos, descuentos y caja destino. El dispositivo vendido no se modifica.
+                  </span>
+                </div>
+              )}
+
               {/* Selector de modo: Teléfono de Stock vs Accesorio/Manual */}
               <div className="flex items-center gap-2 p-1 bg-slate-800/80 rounded-xl border border-slate-700/60">
                 <button
@@ -638,7 +697,7 @@ export default function Ventas({ config, onDataChange }) {
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => { setShowModal(false); setEditandoVenta(null); }}
                   className="px-4 py-2.5 rounded-xl text-slate-400 hover:text-white text-sm"
                 >
                   Cancelar
@@ -647,7 +706,7 @@ export default function Ventas({ config, onDataChange }) {
                   type="submit"
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-600/30 transition text-sm"
                 >
-                  Confirmar Venta y Descontar Stock
+                  {editandoVenta ? 'Guardar Cambios' : 'Confirmar Venta y Descontar Stock'}
                 </button>
               </div>
             </form>
