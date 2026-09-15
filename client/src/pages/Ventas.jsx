@@ -159,6 +159,10 @@ export default function Ventas({ config, onDataChange }) {
         body: JSON.stringify(payload)
       });
       if (res.ok) {
+        const saved = await res.json().catch(() => null);
+        if (editandoVenta && saved && saved.venta) {
+          setVentas(prev => prev.map(v => (v.id === saved.venta.id ? saved.venta : v)));
+        }
         setShowModal(false);
         setEditandoVenta(null);
         // Reset form

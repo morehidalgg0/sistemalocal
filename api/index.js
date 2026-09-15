@@ -49,6 +49,41 @@ async function q(text, params = []) {
   throw new Error("POSTGRES_UNAVAILABLE");
 }
 
+// Persiste una venta en Postgres (solo si la DB está disponible) y ajusta caja/dispositivo en la DB.
+// Reasigna venta.id al id serial real si la fila se inserta ahora.
+async function persistVentaPG(venta, impactarCaja) {
+  if (!isPostgresAvailable) return;
+  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, observaciones";
+  const v = [
+    venta.fecha, venta.dispositivo_id, venta.item_detalle || "", venta.cliente_nombre || "", venta.cliente_contacto || "",
+    venta.vendedor_nombre || "NP", venta.precio_venta_usd, venta.precio_venta_pesos, venta.cotizacion_dolar,
+    venta.costo_total_usd, venta.costo_total_pesos, venta.costo_reparacion, venta.descuentos_regalos_detalle || "",
+    venta.descuento_monto, venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
+    venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Fuerte Dólares",
+    venta.observaciones || ""
+  ];
+  const placeholders = v.map((_, i) => "$" + (i + 1)).join(", ");
+  const r = await q(`INSERT INTO ventas (${cols}) VALUES (${placeholders}) RETURNING id`, v);
+  if (r.rows && r.rows[0]) venta.id = r.rows[0].id;
+
+  if (venta.dispositivo_id) {
+    await q("UPDATE dispositivos SET estado='Vendido' WHERE id=$1", [parseInt(venta.dispositivo_id)]).catch(() => {});
+  }
+
+  if (impactarCaja !== false) {
+    const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [venta.caja_destino || "Caja Fuerte Dólares"]).catch(() => null);
+    if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
+      const cRow = cajaPG.rows[0];
+      const monto = cRow.moneda === "ARS" ? venta.precio_venta_pesos : venta.precio_venta_usd;
+      await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [monto, cRow.id]);
+      await q(
+        `INSERT INTO caja_movimientos (fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [venta.fecha, cRow.id, cRow.nombre, "ENTRADA", "Venta", "Venta: " + (venta.item_detalle || ""), monto, cRow.moneda, venta.cotizacion_dolar, venta.vendedor_nombre || "NP", "VENTA-#" + venta.id]
+      );
+    }
+  }
+}
+
 // ---------------- ROUTES ----------------
 
 app.get("/api/config", async (req, res) => {
@@ -332,7 +367,11 @@ app.delete("/api/dispositivos/:id", async (req, res) => {
 app.get("/api/ventas", async (req, res) => {
   try {
     const r = await q("SELECT * FROM ventas ORDER BY id DESC");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) {
+      const pgIds = new Set(r.rows.map(row => String(row.id)));
+      const extra = (memStore.ventas || []).filter(v => !pgIds.has(String(v.id)));
+      return res.json([...r.rows, ...extra]);
+    }
     return res.json(memStore.ventas || []);
   } catch (e) {
     res.json(memStore.ventas || []);
@@ -382,6 +421,14 @@ app.post("/api/ventas", async (req, res) => {
     if (dIdx !== -1) memStore.dispositivos[dIdx].estado = "Vendido";
   }
 
+  // Persistir en Postgres cuando está disponible (durabilidad + consistencia entre instancias de Vercel)
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      await persistVentaPG(newVenta, b.impactar_caja).catch(e => console.warn("PG insert venta:", e.message));
+    }
+  }
+
   if (b.impactar_caja !== false) {
     const cIdx = (memStore.cuentas_caja || []).findIndex(c => c.nombre === b.caja_destino);
     if (cIdx !== -1) {
@@ -408,7 +455,7 @@ app.post("/api/ventas", async (req, res) => {
   res.json({ success: true, venta: newVenta });
 });
 
-app.put("/api/ventas/:id", (req, res) => {
+app.put("/api/ventas/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const idx = (memStore.ventas || []).findIndex(v => v.id === id);
   if (idx === -1) return res.status(404).json({ error: "Venta no encontrada" });
@@ -492,6 +539,47 @@ app.put("/api/ventas/:id", (req, res) => {
         persona_asociada: updated.vendedor_nombre || "NP",
         comprobante_ref: refVenta
       }, ...(memStore.caja_movimientos || [])];
+    }
+  }
+
+  // Persistir la edición en Postgres cuando está disponible
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        // 1) Revertir el impacto a caja original en PG
+        const refVenta = "VENTA-#" + id;
+        let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [refVenta]).catch(() => null);
+        if (!movPG || !movPG.rows || movPG.rows.length === 0) {
+          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2 ORDER BY id LIMIT 1", [old.caja_destino, "%" + (old.item_detalle || "") + "%"]).catch(() => null);
+        }
+        if (movPG && movPG.rows && movPG.rows.length > 0) {
+          const m = movPG.rows[0];
+          await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [parseFloat(m.monto) || 0, m.cuenta_id]).catch(() => {});
+          await q("DELETE FROM caja_movimientos WHERE id=$1", [m.id]).catch(() => {});
+        }
+        // 2) Actualizar la venta en PG (o insertarla si no existía)
+        const upd = await q(
+          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, ganancia_usd=$13, ganancia_pesos=$14, comision_vendedor_pesos=$15, comision_vendedor_usd=$16, metodo_pago=$17, caja_destino=$18, observaciones=$19 WHERE id=$20`,
+          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Fuerte Dólares", updated.observaciones || "", parseInt(id)]
+        );
+        if (upd.rowCount === 0) {
+          await persistVentaPG(updated, b.impactar_caja);
+        } else if (b.impactar_caja !== false) {
+          const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [updated.caja_destino || "Caja Fuerte Dólares"]).catch(() => null);
+          if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
+            const cRow = cajaPG.rows[0];
+            const monto = cRow.moneda === "ARS" ? updated.precio_venta_pesos : updated.precio_venta_usd;
+            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [monto, cRow.id]).catch(() => {});
+            await q(
+              `INSERT INTO caja_movimientos (fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+              [updated.fecha, cRow.id, cRow.nombre, "ENTRADA", "Venta", "Venta: " + (updated.item_detalle || ""), monto, cRow.moneda, updated.cotizacion_dolar, updated.vendedor_nombre || "NP", refVenta]
+            ).catch(() => {});
+          }
+        }
+      } catch (e) {
+        console.warn("PUT ventas -> PG error:", e.message);
+      }
     }
   }
 
