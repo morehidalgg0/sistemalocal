@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag, Edit2, Trash2 } from 'lucide-react';
+import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag, Edit2, Trash2, X } from 'lucide-react';
 
 const ORIGENES_FIJOS = ['Lucas Moroni', 'Victor Diaz', 'Garden', 'Stock'];
 
@@ -47,6 +47,22 @@ export default function Dispositivos({ config, onDataChange }) {
       });
     } catch (err) {
       console.warn("No se pudo guardar el proveedor en el servidor:", err);
+    }
+    if (onDataChange) onDataChange();
+  };
+
+  const eliminarProveedorExtra = async (nombre) => {
+    const nuevos = proveedoresExtra.filter(p => p !== nombre);
+    setProveedoresExtra(nuevos);
+    if (formData.proveedor === nombre) setFormData({ ...formData, proveedor: 'Garden' });
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proveedores_extra: JSON.stringify(nuevos) })
+      });
+    } catch (err) {
+      console.warn("No se pudo quitar el proveedor en el servidor:", err);
     }
     if (onDataChange) onDataChange();
   };
@@ -496,6 +512,23 @@ export default function Dispositivos({ config, onDataChange }) {
                       >
                         Volver
                       </button>
+                    </div>
+                  )}
+                  {proveedoresExtra.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {proveedoresExtra.map(p => (
+                        <span key={p} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-800/60 border border-slate-700 text-[11px] text-slate-300">
+                          {p}
+                          <button
+                            type="button"
+                            onClick={() => eliminarProveedorExtra(p)}
+                            title={`Eliminar "${p}"`}
+                            className="text-slate-500 hover:text-rose-400 transition-colors"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </span>
+                      ))}
                     </div>
                   )}
                 </div>
