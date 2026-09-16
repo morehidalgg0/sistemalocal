@@ -12,6 +12,45 @@ export default function Dispositivos({ config, onDataChange }) {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  const parseExtras = (v) => {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') {
+      try {
+        const arr = JSON.parse(v);
+        return Array.isArray(arr) ? arr : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  };
+
+  const [proveedoresExtra, setProveedoresExtra] = useState(() => parseExtras(config?.proveedores_extra));
+
+  useEffect(() => {
+    setProveedoresExtra(parseExtras(config?.proveedores_extra));
+  }, [config?.proveedores_extra]);
+
+  const origenes = [...ORIGENES_FIJOS, ...proveedoresExtra.filter(p => !ORIGENES_FIJOS.includes(p))];
+
+  const guardarProveedorExtra = async () => {
+    const nombre = formData.proveedor.trim();
+    if (!nombre) return;
+    const nuevos = [...new Set([...proveedoresExtra, nombre])];
+    setProveedoresExtra(nuevos);
+    setFormData({ ...formData, proveedor: nombre });
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ proveedores_extra: JSON.stringify(nuevos) })
+      });
+    } catch (err) {
+      console.warn("No se pudo guardar el proveedor en el servidor:", err);
+    }
+    if (onDataChange) onDataChange();
+  };
+
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
   const initialForm = {
@@ -420,7 +459,7 @@ export default function Dispositivos({ config, onDataChange }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Proveedor / Origen</label>
-                  {ORIGENES_FIJOS.includes(formData.proveedor) ? (
+                  {origenes.includes(formData.proveedor) ? (
                     <select
                       value={formData.proveedor}
                       onChange={e => {
@@ -429,7 +468,7 @@ export default function Dispositivos({ config, onDataChange }) {
                       }}
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                     >
-                      {ORIGENES_FIJOS.map(p => (
+                      {origenes.map(p => (
                         <option key={p} value={p}>{p}</option>
                       ))}
                       <option value="__manual__">✏️ Escribir otro...</option>
@@ -442,6 +481,14 @@ export default function Dispositivos({ config, onDataChange }) {
                         placeholder="Escribir proveedor / origen..."
                         className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                       />
+                      <button
+                        type="button"
+                        onClick={guardarProveedorExtra}
+                        title="Guardar este proveedor para futuras cargas"
+                        className="shrink-0 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs text-white font-medium transition-colors"
+                      >
+                        Guardar
+                      </button>
                       <button
                         type="button"
                         onClick={() => setFormData({ ...formData, proveedor: 'Garden' })}
