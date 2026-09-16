@@ -13,6 +13,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
   const [showMovModal, setShowMovModal] = useState(false);
   const [busquedaEntidad, setBusquedaEntidad] = useState('');
   const [busquedaMov, setBusquedaMov] = useState('');
+  const [ordenMov, setOrdenMov] = useState('carga'); // 'carga' | 'reciente'
 
   // Form Movimiento CC
   const [movForm, setMovForm] = useState({
@@ -170,10 +171,10 @@ export default function CuentasCorrientes({ config, onDataChange }) {
   );
 
   const qMov = busquedaMov.trim().toLowerCase();
-  const movsVisibles = (movimientos || [])
-    .filter(m => !qMov || (m.concepto || '').toLowerCase().includes(qMov))
-    .slice()
-    .reverse();
+  const filtradosMov = (movimientos || []).filter(m => !qMov || (m.concepto || '').toLowerCase().includes(qMov));
+  const movsVisibles = ordenMov === 'reciente'
+    ? [...filtradosMov].sort((a, b) => b.id - a.id)
+    : [...filtradosMov].reverse();
 
   return (
     <div className="space-y-6">
@@ -308,15 +309,26 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   )}
                 </div>
 
-                <div className="relative">
-                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    value={busquedaMov}
-                    onChange={e => setBusquedaMov(e.target.value)}
-                    placeholder="Buscar equipo, fecha u operación..."
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                    <input
+                      type="text"
+                      value={busquedaMov}
+                      onChange={e => setBusquedaMov(e.target.value)}
+                      placeholder="Buscar equipo, fecha u operación..."
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <select
+                    value={ordenMov}
+                    onChange={e => setOrdenMov(e.target.value)}
+                    title="Ordenar por"
+                    className="bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                  >
+                    <option value="carga">Orden de carga</option>
+                    <option value="reciente">Añadido recientemente</option>
+                  </select>
                 </div>
 
                 {movimientos.length === 0 ? (
