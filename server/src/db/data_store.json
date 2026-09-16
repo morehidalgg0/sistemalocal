@@ -879,15 +879,6 @@
       "activo": true
     },
     {
-      "id": 3,
-      "nombre": "Banco Galicia / Transferencias",
-      "tipo": "Banco",
-      "moneda": "ARS",
-      "saldo_inicial": 0,
-      "saldo_actual": 0,
-      "activo": true
-    },
-    {
       "id": 4,
       "nombre": "Lemon Ezequiel Mora",
       "tipo": "Billetera Virtual",
