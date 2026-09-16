@@ -120,6 +120,10 @@ export default function Cajas({ config, onDataChange }) {
     }
   };
 
+  const movimientosFiltrados = cajaSeleccionada
+    ? movimientos.filter(m => m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre)
+    : movimientos;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -248,12 +252,8 @@ export default function Cajas({ config, onDataChange }) {
               </thead>
               <tbody className="divide-y divide-slate-800">
                 {movimientosFiltrados.map((m) => {
-                  const isEntrada = m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA';
-const movimientosFiltrados = cajaSeleccionada
-    ? movimientos.filter(m => m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre)
-    : movimientos;
-
-  return (
+                const isEntrada = m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA';
+                  return (
                     <tr key={m.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                         {new Date(m.fecha).toLocaleDateString('es-AR')}
