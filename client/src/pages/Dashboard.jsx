@@ -217,7 +217,7 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
                           ${v.precio_venta_usd ? `${v.precio_venta_usd} USD` : `$${v.precio_venta_pesos?.toLocaleString('es-AR')} ARS`}
                         </td>
                         <td className="py-2.5 text-right font-bold text-emerald-400">
-                          +${v.ganancia_usd?.toFixed(1)} USD
+                          +${Number(v.ganancia_usd || 0).toFixed(1)} USD
                         </td>
                       </tr>
                     ))}

@@ -49,6 +49,29 @@ async function q(text, params = []) {
   throw new Error("POSTGRES_UNAVAILABLE");
 }
 
+// Postgres devuelve columnas NUMERIC como strings ("330.00"). El frontend usa .toFixed/.toLocaleString,
+// así que normalizamos a Number las columnas numéricas antes de responder por JSON.
+const COLUMNS_NUMERICAS = new Set([
+  "id", "dispositivo_id", "vendedor_id", "cuenta_id", "entidad_id",
+  "bateria", "costo_usd", "costo_pesos", "costo_reparacion_usd", "costo_reparacion_pesos",
+  "precio_sugerido_usd", "precio_sugerido_pesos", "monto_senia", "precio_venta_usd",
+  "precio_venta_pesos", "cotizacion_dolar", "costo_total_usd", "costo_total_pesos",
+  "costo_reparacion", "descuento_monto", "ganancia_usd", "ganancia_pesos",
+  "comision_vendedor_pesos", "comision_vendedor_usd", "saldo_inicial", "saldo_actual",
+  "monto", "cotizacion", "saldo_adeudado", "saldo_resultante", "stock_actual",
+  "stock_minimo", "porcentaje_comision", "costo_repuesto_usd", "costo_repuesto_pesos",
+  "mano_obra_usd", "mano_obra_pesos", "total_presupuesto_usd", "total_presupuesto_pesos",
+  "dia_vencimiento", "monto_original", "monto_pendiente", "valor_usd", "valor_pesos"
+]);
+function numericize(row) {
+  if (!row) return row;
+  const out = {};
+  for (const [k, v] of Object.entries(row)) {
+    out[k] = (COLUMNS_NUMERICAS.has(k) && typeof v === "string" && v !== "" && !isNaN(Number(v))) ? Number(v) : v;
+  }
+  return out;
+}
+
 // Persiste una venta en Postgres (solo si la DB está disponible) y ajusta caja/dispositivo en la DB.
 // Reasigna venta.id al id serial real si la fila se inserta ahora.
 async function persistVentaPG(venta, impactarCaja) {
@@ -256,8 +279,8 @@ app.get("/api/dashboard", async (req, res) => {
       },
       equiposEnStock: parseInt(dispEnStock.rows[0].c),
       reparacionesActivas: parseInt(repActivas.rows[0].c),
-      ultimasVentas: ultimasVentas.rows,
-      ultimosMovimientos: ultimosMovs.rows
+      ultimasVentas: ultimasVentas.rows.map(numericize),
+      ultimosMovimientos: ultimosMovs.rows.map(numericize)
     });
   } catch (e) {
     const dolar = parseFloat(memStore.configuracion?.dolar_blue || 1480);
@@ -315,7 +338,7 @@ app.get("/api/dashboard", async (req, res) => {
 app.get("/api/dispositivos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM dispositivos ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.dispositivos || []);
   } catch (e) {
     res.json(memStore.dispositivos || []);
@@ -370,7 +393,7 @@ app.get("/api/ventas", async (req, res) => {
     if (r.rows && r.rows.length > 0) {
       const pgIds = new Set(r.rows.map(row => String(row.id)));
       const extra = (memStore.ventas || []).filter(v => !pgIds.has(String(v.id)));
-      return res.json([...r.rows, ...extra]);
+      return res.json([...r.rows.map(numericize), ...extra]);
     }
     return res.json(memStore.ventas || []);
   } catch (e) {
@@ -589,7 +612,7 @@ app.put("/api/ventas/:id", async (req, res) => {
 app.get("/api/cajas", async (req, res) => {
   try {
     const r = await q("SELECT * FROM cuentas_caja ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.cuentas_caja || []);
   } catch (e) {
     res.json(memStore.cuentas_caja || []);
@@ -599,7 +622,7 @@ app.get("/api/cajas", async (req, res) => {
 app.get("/api/cajas/movimientos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM caja_movimientos ORDER BY id DESC");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.caja_movimientos || []);
   } catch (e) {
     res.json(memStore.caja_movimientos || []);
@@ -636,7 +659,7 @@ app.post("/api/cajas/movimientos", async (req, res) => {
 app.get("/api/cuentas-corrientes", async (req, res) => {
   try {
     const r = await q("SELECT * FROM entidades_cc ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.entidades_cc || []);
   } catch (e) {
     res.json(memStore.entidades_cc || []);
@@ -679,7 +702,7 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
 app.get("/api/inventario", async (req, res) => {
   try {
     const r = await q("SELECT * FROM inventario_items ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.inventario_items || []);
   } catch (e) {
     res.json(memStore.inventario_items || []);
@@ -724,7 +747,7 @@ app.delete("/api/inventario/:id", async (req, res) => {
 app.get("/api/reparaciones", async (req, res) => {
   try {
     const r = await q("SELECT * FROM reparaciones ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.reparaciones || []);
   } catch (e) {
     res.json(memStore.reparaciones || []);
@@ -771,7 +794,7 @@ app.put("/api/reparaciones/:id", async (req, res) => {
 app.get("/api/gastos-fijos", async (req, res) => {
   try {
     const r = await q("SELECT * FROM gastos_fijos ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.gastos_fijos || []);
   } catch (e) {
     res.json(memStore.gastos_fijos || []);
@@ -796,7 +819,7 @@ app.post("/api/gastos-fijos", async (req, res) => {
 app.get("/api/deudas-deudores", async (req, res) => {
   try {
     const r = await q("SELECT * FROM deudas_deudores ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.deudas_deudores || []);
   } catch (e) {
     res.json(memStore.deudas_deudores || []);
@@ -822,7 +845,7 @@ app.post("/api/deudas-deudores", async (req, res) => {
 app.get("/api/inversiones", async (req, res) => {
   try {
     const r = await q("SELECT * FROM inversiones ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.inversiones || []);
   } catch (e) {
     res.json(memStore.inversiones || []);
@@ -846,7 +869,7 @@ app.post("/api/inversiones", async (req, res) => {
 app.get("/api/vendedores", async (req, res) => {
   try {
     const r = await q("SELECT * FROM vendedores ORDER BY id");
-    if (r.rows && r.rows.length > 0) return res.json(r.rows);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
     return res.json(memStore.vendedores || []);
   } catch (e) {
     res.json(memStore.vendedores || []);

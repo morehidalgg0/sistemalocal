@@ -302,7 +302,7 @@ export default function Ventas({ config, onDataChange }) {
                       ${v.cotizacion_dolar}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-emerald-400 font-mono">
-                      +${v.ganancia_usd?.toFixed(1)} USD
+                      +${Number(v.ganancia_usd || 0).toFixed(1)} USD
                       <span className="text-[10px] text-slate-400 block font-normal">
                         (~${v.ganancia_pesos?.toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS)
                       </span>
