@@ -367,6 +367,22 @@ app.post("/api/dispositivos", async (req, res) => {
     detalles: b.detalles || ""
   };
   memStore.dispositivos = [newDisp, ...(memStore.dispositivos || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "modelo, color, capacidad, bateria, imei, condicion, costo_usd, costo_pesos, costo_reparacion_usd, precio_sugerido_usd, precio_sugerido_pesos, proveedor, estado, cliente_senia, monto_senia, moneda_senia, detalles";
+        const vals = [newDisp.modelo, newDisp.color, newDisp.capacidad, newDisp.bateria, newDisp.imei, newDisp.condicion, newDisp.costo_usd, newDisp.costo_pesos, newDisp.costo_reparacion_usd, newDisp.precio_sugerido_usd, newDisp.precio_sugerido_pesos, newDisp.proveedor || "", newDisp.estado, newDisp.cliente_senia || "", newDisp.monto_senia, "USD", newDisp.detalles || ""];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO dispositivos (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newDisp.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert dispositivo:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, dispositivo: newDisp });
 });
 
@@ -376,14 +392,40 @@ app.put("/api/dispositivos/:id", async (req, res) => {
   const idx = (memStore.dispositivos || []).findIndex(d => d.id === id);
   if (idx !== -1) {
     memStore.dispositivos[idx] = { ...memStore.dispositivos[idx], ...b };
-    return res.json({ success: true, dispositivo: memStore.dispositivos[idx] });
   }
-  res.json({ success: true });
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const d = memStore.dispositivos[idx] || { ...b, id };
+        const colsUpdate = "modelo=$1, color=$2, capacidad=$3, bateria=$4, imei=$5, condicion=$6, costo_usd=$7, costo_pesos=$8, costo_reparacion_usd=$9, precio_sugerido_usd=$10, precio_sugerido_pesos=$11, proveedor=$12, estado=$13, cliente_senia=$14, monto_senia=$15, detalles=$16, updated_at=CURRENT_TIMESTAMP";
+        const valsUpdate = [d.modelo, d.color || "", d.capacidad || "", d.bateria, d.imei || "", d.condicion || "Usado", parseFloat(d.costo_usd) || 0, parseFloat(d.costo_pesos) || 0, parseFloat(d.costo_reparacion_usd) || 0, parseFloat(d.precio_sugerido_usd) || 0, parseFloat(d.precio_sugerido_pesos) || 0, d.proveedor || "", d.estado || "En Stock", d.cliente_senia || "", parseFloat(d.monto_senia) || 0, d.detalles || ""];
+        const upd = await q(`UPDATE dispositivos SET ${colsUpdate} WHERE id=${id}`, valsUpdate);
+        if (upd.rowCount === 0) {
+          const cols = "id, modelo, color, capacidad, bateria, imei, condicion, costo_usd, costo_pesos, costo_reparacion_usd, precio_sugerido_usd, precio_sugerido_pesos, proveedor, estado, cliente_senia, monto_senia, moneda_senia, detalles";
+          const vals = [id, ...valsUpdate];
+          const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+          await q(`INSERT INTO dispositivos (${cols}) VALUES (${ph}) ON CONFLICT (id) DO NOTHING`, vals).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("PG update dispositivo:", e.message);
+      }
+    }
+  }
+
+  return res.json({ success: true, dispositivo: memStore.dispositivos[idx] });
 });
 
 app.delete("/api/dispositivos/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   memStore.dispositivos = (memStore.dispositivos || []).filter(d => d.id !== id);
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      await q("DELETE FROM dispositivos WHERE id=$1", [id]).catch(() => {});
+    }
+  }
   res.json({ success: true });
 });
 
@@ -653,6 +695,26 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     comprobante_ref: b.comprobante_ref || ""
   };
   memStore.caja_movimientos = [newMov, ...(memStore.caja_movimientos || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref";
+        const vals = [newMov.fecha, newMov.cuenta_id, newMov.cuenta_nombre, newMov.tipo_movimiento, newMov.categoria, newMov.concepto, newMov.monto, newMov.moneda, newMov.cotizacion, newMov.persona_asociada, newMov.comprobante_ref || ""];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO caja_movimientos (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newMov.id = r.rows[0].id;
+        const delta = b.tipo_movimiento === "ENTRADA" ? monto : (b.tipo_movimiento === "SALIDA" ? -monto : 0);
+        if (delta !== 0) {
+          await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [delta, c.id]).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("PG insert caja movimiento:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, movimiento: newMov, cuenta_actualizada: c });
 });
 
@@ -668,8 +730,13 @@ app.get("/api/cuentas-corrientes", async (req, res) => {
 
 app.get("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
   const id = parseInt(req.params.id);
-  const movs = (memStore.movimientos_cc || []).filter(m => m.entidad_id === id);
-  res.json(movs);
+  try {
+    const r = await q("SELECT * FROM movimientos_cc WHERE entidad_id=$1 ORDER BY id DESC", [id]);
+    if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
+    return res.json((memStore.movimientos_cc || []).filter(m => m.entidad_id === id));
+  } catch (e) {
+    res.json((memStore.movimientos_cc || []).filter(m => m.entidad_id === id));
+  }
 });
 
 app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
@@ -696,6 +763,23 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
     observaciones: b.observaciones || ""
   };
   memStore.movimientos_cc = [newMov, ...(memStore.movimientos_cc || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "entidad_id, fecha, tipo, concepto, monto, moneda, saldo_resultante, observaciones";
+        const vals = [e.id, newMov.fecha, newMov.tipo, newMov.concepto, monto, newMov.moneda, nuevoSaldo, newMov.observaciones || ""];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO movimientos_cc (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newMov.id = r.rows[0].id;
+        await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [nuevoSaldo, e.id]).catch(() => {});
+      } catch (err) {
+        console.warn("PG insert movimiento CC:", err.message);
+      }
+    }
+  }
+
   res.json({ success: true, movimiento: newMov, entidad_actualizada: e });
 });
 
@@ -724,6 +808,22 @@ app.post("/api/inventario", async (req, res) => {
     ubicacion: b.ubicacion || "Local"
   };
   memStore.inventario_items = [newItem, ...(memStore.inventario_items || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "categoria, nombre, stock_actual, stock_minimo, costo_pesos, costo_usd, precio_venta_pesos, precio_venta_usd, ubicacion";
+        const vals = [newItem.categoria, newItem.nombre, newItem.stock_actual, newItem.stock_minimo, newItem.costo_pesos, newItem.costo_usd, newItem.precio_venta_pesos, newItem.precio_venta_usd, newItem.ubicacion];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO inventario_items (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newItem.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert inventario:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, item: newItem });
 });
 
@@ -733,14 +833,40 @@ app.put("/api/inventario/:id", async (req, res) => {
   const idx = (memStore.inventario_items || []).findIndex(i => i.id === id);
   if (idx !== -1) {
     memStore.inventario_items[idx] = { ...memStore.inventario_items[idx], ...b };
-    return res.json({ success: true, item: memStore.inventario_items[idx] });
   }
-  res.json({ success: true });
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const it = memStore.inventario_items[idx] || { ...b, id };
+        const colsUpdate = "categoria=$1, nombre=$2, stock_actual=$3, stock_minimo=$4, costo_pesos=$5, costo_usd=$6, precio_venta_pesos=$7, precio_venta_usd=$8, ubicacion=$9, updated_at=CURRENT_TIMESTAMP";
+        const valsUpdate = [it.categoria || "Accesorio", it.nombre, parseInt(it.stock_actual) || 0, parseInt(it.stock_minimo) || 2, parseFloat(it.costo_pesos) || 0, parseFloat(it.costo_usd) || 0, parseFloat(it.precio_venta_pesos) || 0, parseFloat(it.precio_venta_usd) || 0, it.ubicacion || "Local"];
+        const upd = await q(`UPDATE inventario_items SET ${colsUpdate} WHERE id=${id}`, valsUpdate);
+        if (upd.rowCount === 0) {
+          const cols = "id, categoria, nombre, stock_actual, stock_minimo, costo_pesos, costo_usd, precio_venta_pesos, precio_venta_usd, ubicacion";
+          const vals = [id, ...valsUpdate];
+          const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+          await q(`INSERT INTO inventario_items (${cols}) VALUES (${ph}) ON CONFLICT (id) DO NOTHING`, vals).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("PG update inventario:", e.message);
+      }
+    }
+  }
+
+  return res.json({ success: true, item: memStore.inventario_items[idx] });
 });
 
 app.delete("/api/inventario/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   memStore.inventario_items = (memStore.inventario_items || []).filter(i => i.id !== id);
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      await q("DELETE FROM inventario_items WHERE id=$1", [id]).catch(() => {});
+    }
+  }
   res.json({ success: true });
 });
 
@@ -777,6 +903,22 @@ app.post("/api/reparaciones", async (req, res) => {
     observaciones: b.observaciones || ""
   };
   memStore.reparaciones = [newRep, ...(memStore.reparaciones || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "fecha_ingreso, equipo, imei, cliente_nombre, cliente_telefono, problema_reportado, diagnostico_tecnico, tecnico_asignado, costo_repuesto_usd, costo_repuesto_pesos, mano_obra_usd, mano_obra_pesos, total_presupuesto_usd, total_presupuesto_pesos, estado, pagado, observaciones";
+        const vals = [newRep.fecha_ingreso, newRep.equipo, newRep.imei, newRep.cliente_nombre, newRep.cliente_telefono, newRep.problema_reportado, newRep.diagnostico_tecnico, newRep.tecnico_asignado, newRep.costo_repuesto_usd, newRep.costo_repuesto_pesos, newRep.mano_obra_usd, newRep.mano_obra_pesos, newRep.total_presupuesto_usd, newRep.total_presupuesto_pesos, newRep.estado, newRep.pagado, newRep.observaciones || ""];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO reparaciones (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newRep.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert reparacion:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, reparacion: newRep });
 });
 
@@ -786,9 +928,29 @@ app.put("/api/reparaciones/:id", async (req, res) => {
   const idx = (memStore.reparaciones || []).findIndex(r => r.id === id);
   if (idx !== -1) {
     memStore.reparaciones[idx] = { ...memStore.reparaciones[idx], ...b };
-    return res.json({ success: true, reparacion: memStore.reparaciones[idx] });
   }
-  res.json({ success: true });
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = memStore.reparaciones[idx] || { ...b, id };
+        const colsUpdate = "equipo=$1, imei=$2, cliente_nombre=$3, cliente_telefono=$4, problema_reportado=$5, diagnostico_tecnico=$6, tecnico_asignado=$7, costo_repuesto_usd=$8, costo_repuesto_pesos=$9, mano_obra_usd=$10, mano_obra_pesos=$11, total_presupuesto_usd=$12, total_presupuesto_pesos=$13, estado=$14, pagado=$15, observaciones=$16, updated_at=CURRENT_TIMESTAMP";
+        const valsUpdate = [r.equipo, r.imei || "", r.cliente_nombre || "", r.cliente_telefono || "", r.problema_reportado || "", r.diagnostico_tecnico || "", r.tecnico_asignado || "Taller Central", parseFloat(r.costo_repuesto_usd) || 0, parseFloat(r.costo_repuesto_pesos) || 0, parseFloat(r.mano_obra_usd) || 0, parseFloat(r.mano_obra_pesos) || 0, parseFloat(r.total_presupuesto_usd) || 0, parseFloat(r.total_presupuesto_pesos) || 0, r.estado || "En Taller", !!r.pagado, r.observaciones || ""];
+        const upd = await q(`UPDATE reparaciones SET ${colsUpdate} WHERE id=${id}`, valsUpdate);
+        if (upd.rowCount === 0) {
+          const cols = "id, fecha_ingreso, equipo, imei, cliente_nombre, cliente_telefono, problema_reportado, diagnostico_tecnico, tecnico_asignado, costo_repuesto_usd, costo_repuesto_pesos, mano_obra_usd, mano_obra_pesos, total_presupuesto_usd, total_presupuesto_pesos, estado, pagado, observaciones";
+          const vals = [id, r.fecha_ingreso || new Date().toISOString(), ...valsUpdate];
+          const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+          await q(`INSERT INTO reparaciones (${cols}) VALUES (${ph}) ON CONFLICT (id) DO NOTHING`, vals).catch(() => {});
+        }
+      } catch (e) {
+        console.warn("PG update reparacion:", e.message);
+      }
+    }
+  }
+
+  return res.json({ success: true, reparacion: memStore.reparaciones[idx] });
 });
 
 app.get("/api/gastos-fijos", async (req, res) => {
@@ -813,6 +975,22 @@ app.post("/api/gastos-fijos", async (req, res) => {
     pagado: b.pagado || false
   };
   memStore.gastos_fijos = [newG, ...(memStore.gastos_fijos || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "concepto, persona_responsable, monto, moneda, dia_vencimiento, pagado";
+        const vals = [newG.concepto, newG.persona_responsable, newG.monto, newG.moneda, newG.dia_vencimiento, newG.pagado];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO gastos_fijos (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newG.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert gasto fijo:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, gasto: newG });
 });
 
@@ -839,6 +1017,22 @@ app.post("/api/deudas-deudores", async (req, res) => {
     estado: "Pendiente"
   };
   memStore.deudas_deudores = [newD, ...(memStore.deudas_deudores || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "tipo, persona, concepto, monto_original, monto_pendiente, moneda, estado";
+        const vals = [newD.tipo, newD.persona, newD.concepto, newD.monto_original, newD.monto_pendiente, newD.moneda, newD.estado];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO deudas_deudores (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newD.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert deuda/deudor:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, registro: newD });
 });
 
@@ -863,6 +1057,22 @@ app.post("/api/inversiones", async (req, res) => {
     categoria: b.categoria || "Equipamiento"
   };
   memStore.inversiones = [newInv, ...(memStore.inversiones || [])];
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const cols = "item, valor_usd, valor_pesos, contacto_proveedor, categoria";
+        const vals = [newInv.item, newInv.valor_usd, newInv.valor_pesos, newInv.contacto_proveedor, newInv.categoria];
+        const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
+        const r = await q(`INSERT INTO inversiones (${cols}) VALUES (${ph}) RETURNING id`, vals);
+        if (r.rows && r.rows[0]) newInv.id = r.rows[0].id;
+      } catch (e) {
+        console.warn("PG insert inversion:", e.message);
+      }
+    }
+  }
+
   res.json({ success: true, inversion: newInv });
 });
 
