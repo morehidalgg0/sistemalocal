@@ -2,11 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============ TEMAS: OSCURO (predeterminado) y CLARO ============ */
+:root {
+  color-scheme: dark;
+  --np-slate-50: 248 250 252;
+  --np-slate-100: 241 245 249;
+  --np-slate-200: 226 232 240;
+  --np-slate-300: 203 213 225;
+  --np-slate-400: 148 163 184;
+  --np-slate-500: 100 116 139;
+  --np-slate-600: 71 85 105;
+  --np-slate-700: 51 65 85;
+  --np-slate-800: 30 41 59;
+  --np-slate-900: 15 23 42;
+  --np-slate-950: 2 6 23;
+}
+
+html.light {
+  color-scheme: light;
+  --np-slate-50: 11 18 32;
+  --np-slate-100: 17 24 39;
+  --np-slate-200: 31 41 55;
+  --np-slate-300: 55 65 81;
+  --np-slate-400: 91 107 130;
+  --np-slate-500: 122 135 148;
+  --np-slate-600: 154 167 181;
+  --np-slate-700: 194 203 216;
+  --np-slate-800: 226 232 240;
+  --np-slate-900: 241 245 249;
+  --np-slate-950: 233 238 245;
+}
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   background-color: #0b0f19;
   color: #f1f5f9;
+}
+
+html.light body {
+  background-color: #e9eef5;
+  color: #111827;
 }
 
 /* Custom Scrollbars */
@@ -17,10 +53,52 @@ body {
 ::-webkit-scrollbar-track {
   background: #0f172a;
 }
+html.light ::-webkit-scrollbar-track {
+  background: #dbe2ec;
+}
 ::-webkit-scrollbar-thumb {
   background: #334155;
   border-radius: 4px;
 }
+html.light ::-webkit-scrollbar-thumb {
+  background: #9aa7b5;
+}
 ::-webkit-scrollbar-thumb:hover {
   background: #475569;
 }
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #7a8794;
+}
+
+/* ============ AJUSTES DEL TEMA CLARO ============ */
+
+/* En claro los textos que eran blancos deben oscurecerse */
+html.light .text-white { color: rgb(var(--np-slate-100)); }
+
+/* Se mantienen blancos los que están sobre fondos de color (botones, badges) */
+html.light .text-white.bg-sky-500,
+html.light .text-white.bg-sky-600,
+html.light .text-white.bg-indigo-500,
+html.light .text-white.bg-indigo-600,
+html.light .text-white.bg-emerald-500,
+html.light .text-white.bg-emerald-600,
+html.light .text-white.bg-amber-500,
+html.light .text-white.bg-amber-600,
+html.light .text-white.bg-rose-500,
+html.light .text-white.bg-rose-600,
+html.light .text-white.from-sky-600,
+html.light .text-white.from-indigo-500 { color: #fff; }
+
+/* Hovers: en claro hoverear a blanco resultaba invisible → se oscurece (salvo fondos de color) */
+html.light .hover\:text-white:hover { color: rgb(var(--np-slate-950)); }
+html.light .hover\:text-white.hover\:bg-amber-500:hover,
+html.light .hover\:text-white.hover\:bg-emerald-500:hover,
+html.light .hover\:text-white.hover\:bg-indigo-500:hover,
+html.light .hover\:text-white.hover\:bg-sky-500:hover { color: #fff; }
+
+/* Acentos nivel 400 → variante oscura para leerlos sobre fondo claro */
+html.light .text-emerald-400 { color: #059669; }
+html.light .text-sky-400 { color: #0284c7; }
+html.light .text-indigo-400 { color: #4f46e5; }
+html.light .text-amber-400 { color: #d97706; }
+html.light .text-rose-400 { color: #e11d48; }

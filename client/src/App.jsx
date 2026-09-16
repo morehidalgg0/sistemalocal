@@ -10,7 +10,9 @@ import {
   CreditCard,
   Menu, 
   X,
-  RefreshCw
+  RefreshCw,
+  Sun,
+  Moon
 } from "lucide-react";
 
 import Dashboard from "./pages/Dashboard";
@@ -25,6 +27,15 @@ import fallbackData from "./data/fallbackData";
 
 // Última cotización conocida guardada en el navegador para evitar el salto a 1480
 const DOLAR_CACHE_KEY = "newpoint_dolar_blue";
+const THEME_KEY = "np_theme";
+
+function getTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY) || "dark";
+  } catch {
+    return "dark";
+  }
+}
 
 function getDolarCache() {
   try {
@@ -54,6 +65,14 @@ export default function App() {
   const [dolarInfo, setDolarInfo] = useState(() => getDolarCache() || { venta: null, actualizado: null, fuente: null });
   const [actualizandoDolar, setActualizandoDolar] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [theme, setTheme] = useState(getTheme);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("light", theme === "light");
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {}
+  }, [theme]);
 
   const calculateFallbackDashboard = () => {
     const dolar = parseFloat(fallbackData.configuracion?.dolar_blue || 1480);
@@ -282,8 +301,15 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4 text-xs font-mono">
-          <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
+          <div className="flex items-center gap-2.5 text-xs font-mono">
+            <button
+              onClick={() => setTheme(t => (t === "dark" ? "light" : "dark"))}
+              title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+              className="p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-sky-400 transition-colors"
+            >
+              {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
+            <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg text-slate-300">
             <span>Dólar Blue:</span>
             <strong className="text-emerald-400">${config?.dolar_blue || "1480"}</strong>
             <button
