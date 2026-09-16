@@ -304,7 +304,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[11px] text-slate-500">{new Date(m.fecha).toLocaleDateString('es-AR')}</span>
+                                <span className="text-[11px] text-slate-500">{m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '—'}</span>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${esCargo ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
                                   {esEquipo ? 'Entrega de Equipo' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
                                 </span>
