@@ -172,14 +172,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
   const qMov = busquedaMov.trim().toLowerCase();
   const movsVisibles = (movimientos || [])
     .filter(m => !qMov || (m.concepto || '').toLowerCase().includes(qMov))
-    .sort((a, b) => {
-      const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
-      const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
-      if (fa && fb) return fb - fa;
-      if (fa && !fb) return -1;
-      if (!fa && fb) return 1;
-      return b.id - a.id;
-    });
+    .slice()
+    .reverse();
 
   return (
     <div className="space-y-6">
