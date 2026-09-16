@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2 } from 'lucide-react';
+import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2, Smartphone } from 'lucide-react';
 
 export default function CuentasCorrientes({ config, onDataChange }) {
   const [entidades, setEntidades] = useState([]);
@@ -271,51 +271,60 @@ export default function CuentasCorrientes({ config, onDataChange }) {
 
               {/* Movimientos de la Cuenta */}
               <div className="space-y-3">
-                <h3 className="text-sm font-bold text-slate-300">Historial de Operaciones</h3>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-300">Detalle de Equipos / Operaciones</h3>
+                  {movimientos.length > 0 && (
+                    <span className="text-[11px] text-slate-500">
+                      Total en esta cuenta: <span className="text-slate-300 font-semibold">${parseFloat(selectedEntidad.saldo_adeudado || 0).toLocaleString('es-AR')} {selectedEntidad.moneda_principal}</span>
+                    </span>
+                  )}
+                </div>
 
                 {movimientos.length === 0 ? (
                   <div className="text-center py-8 text-slate-500 text-sm bg-slate-800/20 rounded-xl border border-slate-800">
-                    No hay movimientos registrados para esta cuenta aún.
+                    No hay equipos ni operaciones registradas para esta cuenta aún.
                   </div>
                 ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-slate-800/60 text-xs font-semibold text-slate-400 uppercase">
-                        <tr>
-                          <th className="py-2.5 px-3">Fecha</th>
-                          <th className="py-2.5 px-3">Tipo</th>
-                          <th className="py-2.5 px-3">Concepto / Detalle</th>
-                          <th className="py-2.5 px-3 text-right">Monto</th>
-                          <th className="py-2.5 px-3 text-right">Saldo Resultante</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {movimientos.slice().reverse().map(m => {
-                          const isPago = m.tipo === 'PAGO_REALIZADO';
-                          return (
-                            <tr key={m.id} className="hover:bg-slate-800/40">
-                              <td className="py-2.5 px-3 text-slate-400 text-xs whitespace-nowrap">
-                                {new Date(m.fecha).toLocaleDateString('es-AR')}
-                              </td>
-                              <td className="py-2.5 px-3">
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${isPago ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'}`}>
-                                  {isPago ? 'Pago Realizado' : 'Entrega / Cargo'}
+                  <div className="space-y-2">
+                    {movimientos.slice().reverse().map(m => {
+                      const esCargo = m.tipo === 'ENTREGA_EQUIPO' || m.tipo === 'SERVICIO_TECNICO';
+                      const esEquipo = m.tipo === 'ENTREGA_EQUIPO';
+                      return (
+                        <div
+                          key={m.id}
+                          className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border transition ${
+                            esCargo
+                              ? 'bg-slate-800/30 border-slate-800 hover:border-sky-600/40'
+                              : 'bg-emerald-500/5 border-slate-800 hover:border-emerald-500/40'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`p-2 rounded-lg shrink-0 ${esCargo ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                              {esEquipo ? <Smartphone className="w-4 h-4" /> : (esCargo ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-[11px] text-slate-500">{new Date(m.fecha).toLocaleDateString('es-AR')}</span>
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${esCargo ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                  {esEquipo ? 'Entrega de Equipo' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
                                 </span>
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-200 text-xs">
-                                {m.concepto}
-                              </td>
-                              <td className={`py-2.5 px-3 text-right font-bold font-mono ${isPago ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                {isPago ? '-' : '+'}${m.monto?.toLocaleString('es-AR')} {m.moneda}
-                              </td>
-                              <td className="py-2.5 px-3 text-right font-mono text-slate-300 text-xs">
-                                ${m.saldo_resultante?.toLocaleString('es-AR')}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                              </div>
+                              <div className={`font-semibold text-sm text-white truncate mt-0.5 ${esEquipo ? 'flex items-center gap-1.5' : ''}`}>
+                                {esEquipo && <Smartphone className="w-3.5 h-3.5 text-sky-400 shrink-0" />}
+                                <span>{m.concepto}</span>
+                              </div>
+                              <div className="text-[11px] text-slate-500 mt-1">
+                                Saldo resultante: <span className="font-mono text-slate-400">${m.saldo_resultante?.toLocaleString('es-AR')} {m.moneda}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`text-right shrink-0 font-bold font-mono ${esCargo ? 'text-rose-400' : 'text-emerald-400'}`}>
+                            {esCargo ? '+' : '-'}${m.monto?.toLocaleString('es-AR')}
+                            <span className="block text-[10px] font-sans font-normal text-slate-500">{m.moneda}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -355,10 +364,16 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   required
                   value={movForm.concepto}
                   onChange={e => setMovForm({ ...movForm, concepto: e.target.value })}
-                  placeholder="ej. Pago efectivo / Entrega 16 Pro Max"
+                  placeholder={movForm.tipo === 'ENTREGA_EQUIPO' ? 'ej. iPhone 15 Pro 256GB (IMEI: 123456)' : 'ej. Pago efectivo'}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                 />
               </div>
+
+              {movForm.tipo === 'ENTREGA_EQUIPO' && (
+                <div className="text-[11px] text-sky-400/90 bg-sky-500/5 border border-sky-600/20 rounded-lg px-3 py-2">
+                  El monto de este equipo se <b>suma automáticamente</b> al total de la cuenta corriente.
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Monto ({selectedEntidad.moneda_principal}) *</label>
