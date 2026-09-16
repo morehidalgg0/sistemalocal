@@ -66,7 +66,7 @@ export default function Ventas({ config, onDataChange }) {
     regalo_componentes: [],
     regalo_costo_snapshot_usd: 0,
     comision_vendedor_pesos: 0,
-    caja_destino: 'Caja Fuerte Dólares',
+    caja_destino: 'Caja Dólares',
     metodo_pago: 'Efectivo USD',
     impactar_caja: true,
     observaciones: ''
@@ -171,7 +171,7 @@ export default function Ventas({ config, onDataChange }) {
       regalo_componentes: componentes,
       regalo_costo_snapshot_usd: snapshotAcc,
       comision_vendedor_pesos: v.comision_vendedor_pesos || 0,
-      caja_destino: v.caja_destino || 'Caja Fuerte Dólares',
+      caja_destino: v.caja_destino || 'Caja Dólares',
       metodo_pago: v.metodo_pago || 'Efectivo USD',
       impactar_caja: true,
       observaciones: v.observaciones || ''
@@ -286,7 +286,7 @@ setShowModal(true);
           regalo_componentes: [],
           regalo_costo_snapshot_usd: 0,
           comision_vendedor_pesos: 0,
-          caja_destino: 'Caja Fuerte Dólares',
+          caja_destino: 'Caja Dólares',
           metodo_pago: 'Efectivo USD',
           impactar_caja: true,
           observaciones: ''

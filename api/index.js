@@ -138,7 +138,7 @@ async function persistVentaPG(venta, impactarCaja) {
     venta.costo_total_usd, venta.costo_total_pesos, venta.costo_reparacion, venta.descuentos_regalos_detalle || "",
     venta.descuento_monto, venta.regalo_componentes || null, venta.regalo_costo_snapshot_usd || 0,
     venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
-    venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Fuerte Dólares",
+    venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Dólares",
     venta.observaciones || ""
   ];
   const placeholders = v.map((_, i) => "$" + (i + 1)).join(", ");
@@ -150,7 +150,7 @@ async function persistVentaPG(venta, impactarCaja) {
   }
 
   if (impactarCaja !== false) {
-    const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [venta.caja_destino || "Caja Fuerte Dólares"]).catch(() => null);
+    const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [venta.caja_destino || "Caja Dólares"]).catch(() => null);
     if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
       const cRow = cajaPG.rows[0];
       const monto = cRow.moneda === "ARS" ? venta.precio_venta_pesos : venta.precio_venta_usd;
@@ -535,7 +535,7 @@ app.post("/api/ventas", async (req, res) => {
     ganancia_pesos: ganUSD * dolar,
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
-    caja_destino: b.caja_destino || "Caja Fuerte Dólares",
+    caja_destino: b.caja_destino || "Caja Dólares",
     metodo_pago: b.metodo_pago || "Efectivo USD"
   };
 
@@ -688,12 +688,12 @@ app.put("/api/ventas/:id", async (req, res) => {
         // 2) Actualizar la venta en PG (o insertarla si no existía)
         const upd = await q(
           `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, metodo_pago=$19, caja_destino=$20, observaciones=$21 WHERE id=$22`,
-          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Fuerte Dólares", updated.observaciones || "", parseInt(id)]
+          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.observaciones || "", parseInt(id)]
         );
         if (upd.rowCount === 0) {
           await persistVentaPG(updated, b.impactar_caja);
         } else if (b.impactar_caja !== false) {
-          const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [updated.caja_destino || "Caja Fuerte Dólares"]).catch(() => null);
+          const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [updated.caja_destino || "Caja Dólares"]).catch(() => null);
           if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
             const cRow = cajaPG.rows[0];
             const monto = cRow.moneda === "ARS" ? updated.precio_venta_pesos : updated.precio_venta_usd;

@@ -19,8 +19,8 @@ const vendedores = [
 ];
 
 const cuentas_caja = [
-  { id: 1, nombre: "Caja Fuerte Dólares", tipo: "Caja Fuerte USD", moneda: "USD", saldo_inicial: 1470, saldo_actual: 1470, activo: true },
-  { id: 2, nombre: "Caja Fuerte Pesos", tipo: "Caja Fuerte Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 193200, activo: true },
+  { id: 1, nombre: "Caja Dólares", tipo: "Caja Dólares", moneda: "USD", saldo_inicial: 1470, saldo_actual: 1470, activo: true },
+  { id: 2, nombre: "Caja Pesos", tipo: "Caja Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 193200, activo: true },
   { id: 3, nombre: "Banco Galicia / Transferencias", tipo: "Banco", moneda: "ARS", saldo_inicial: 0, saldo_actual: 0, activo: true },
   { id: 4, nombre: "Lemon Ezequiel Mora", tipo: "Billetera Virtual", moneda: "ARS", saldo_inicial: 854000, saldo_actual: 174254, activo: true },
   { id: 5, nombre: "Lemon Ema Haase", tipo: "Billetera Virtual", moneda: "ARS", saldo_inicial: 0, saldo_actual: 1000, activo: true },
@@ -258,7 +258,7 @@ const ventas = [
     "ganancia_pesos": 43990,
     "comision_vendedor_pesos": 68000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -281,7 +281,7 @@ const ventas = [
     "ganancia_pesos": 19500,
     "comision_vendedor_pesos": 60000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -304,7 +304,7 @@ const ventas = [
     "ganancia_pesos": 26200,
     "comision_vendedor_pesos": 5000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Pesos",
+    "caja_destino": "Caja Pesos",
     "metodo_pago": "Efectivo ARS"
   },
   {
@@ -327,7 +327,7 @@ const ventas = [
     "ganancia_pesos": 20780,
     "comision_vendedor_pesos": 1200,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -350,7 +350,7 @@ const ventas = [
     "ganancia_pesos": 19050,
     "comision_vendedor_pesos": 10000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -373,7 +373,7 @@ const ventas = [
     "ganancia_pesos": 15240,
     "comision_vendedor_pesos": 60000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -396,7 +396,7 @@ const ventas = [
     "ganancia_pesos": 15200,
     "comision_vendedor_pesos": 20000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -442,7 +442,7 @@ const ventas = [
     "ganancia_pesos": 21625,
     "comision_vendedor_pesos": 20000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -465,7 +465,7 @@ const ventas = [
     "ganancia_pesos": 11370,
     "comision_vendedor_pesos": 20000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -488,7 +488,7 @@ const ventas = [
     "ganancia_pesos": 0,
     "comision_vendedor_pesos": 0,
     "comision_vendedor_usd": 0,
-    "caja_destino": "Caja Fuerte Pesos",
+    "caja_destino": "Caja Pesos",
     "metodo_pago": "Efectivo ARS"
   },
   {
@@ -511,7 +511,7 @@ const ventas = [
     "ganancia_pesos": 41670,
     "comision_vendedor_pesos": 77000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -534,7 +534,7 @@ const ventas = [
     "ganancia_pesos": 26005.7,
     "comision_vendedor_pesos": 68000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -557,7 +557,7 @@ const ventas = [
     "ganancia_pesos": 28916.5,
     "comision_vendedor_pesos": 20000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -580,7 +580,7 @@ const ventas = [
     "ganancia_pesos": 42900,
     "comision_vendedor_pesos": 83000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -603,7 +603,7 @@ const ventas = [
     "ganancia_pesos": 90000,
     "comision_vendedor_pesos": 68000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -626,7 +626,7 @@ const ventas = [
     "ganancia_pesos": 150000,
     "comision_vendedor_pesos": 60000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -649,7 +649,7 @@ const ventas = [
     "ganancia_pesos": 150000,
     "comision_vendedor_pesos": 77000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -672,7 +672,7 @@ const ventas = [
     "ganancia_pesos": 240000,
     "comision_vendedor_pesos": 20000,
     "comision_vendedor_usd": 10,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   },
   {
@@ -695,7 +695,7 @@ const ventas = [
     "ganancia_pesos": 240000,
     "comision_vendedor_pesos": 108000,
     "comision_vendedor_usd": 11,
-    "caja_destino": "Caja Fuerte Dólares",
+    "caja_destino": "Caja Dólares",
     "metodo_pago": "Efectivo USD"
   }
 ];
@@ -780,15 +780,15 @@ const reparaciones = [
 ];
 
 const caja_movimientos = [
-  { id: 1, fecha: "2026-08-01T09:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "ENTRADA", categoria: "Apertura", concepto: "Saldo inicial del período", monto: 1470, moneda: "USD", cotizacion: 1, persona_asociada: "Administración" },
-  { id: 2, fecha: "2026-08-01T09:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Fuerte Pesos", tipo_movimiento: "ENTRADA", categoria: "Apertura", concepto: "Saldo inicial del período", monto: 193200, moneda: "ARS", cotizacion: 1, persona_asociada: "Administración" },
-  { id: 3, fecha: "2026-08-02T12:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "ENTRADA", categoria: "Venta", concepto: "Venta iPhone 16 Blanco 100%", monto: 600, moneda: "USD", cotizacion: 1520, persona_asociada: "NP" },
-  { id: 4, fecha: "2026-08-03T14:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Lucas Moroni MacBook", monto: 1400, moneda: "USD", cotizacion: 1, persona_asociada: "Lucas Moroni" },
-  { id: 5, fecha: "2026-08-05T16:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "ENTRADA", categoria: "Venta", concepto: "Venta iPhone 17 Pro Max", monto: 700, moneda: "USD", cotizacion: 1520, persona_asociada: "NP" },
-  { id: 6, fecha: "2026-08-06T18:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Garden mayorista", monto: 600, moneda: "USD", cotizacion: 1, persona_asociada: "Garden" },
-  { id: 7, fecha: "2026-08-07T11:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Fuerte Dólares", tipo_movimiento: "ENTRADA", categoria: "Compra USD", concepto: "Compra 200 USD efectivo", monto: 200, moneda: "USD", cotizacion: 1560, persona_asociada: "Administración" },
-  { id: 8, fecha: "2026-08-07T11:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Fuerte Pesos", tipo_movimiento: "SALIDA", categoria: "Compra USD", concepto: "Egreso compra 200 USD x $1560", monto: 312000, moneda: "ARS", cotizacion: 1560, persona_asociada: "Administración" },
-  { id: 9, fecha: "2026-08-08T19:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Fuerte Pesos", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Garden repuestos", monto: 280000, moneda: "ARS", cotizacion: 1, persona_asociada: "Garden" }
+  { id: 1, fecha: "2026-08-01T09:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "ENTRADA", categoria: "Apertura", concepto: "Saldo inicial del período", monto: 1470, moneda: "USD", cotizacion: 1, persona_asociada: "Administración" },
+  { id: 2, fecha: "2026-08-01T09:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Pesos", tipo_movimiento: "ENTRADA", categoria: "Apertura", concepto: "Saldo inicial del período", monto: 193200, moneda: "ARS", cotizacion: 1, persona_asociada: "Administración" },
+  { id: 3, fecha: "2026-08-02T12:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "ENTRADA", categoria: "Venta", concepto: "Venta iPhone 16 Blanco 100%", monto: 600, moneda: "USD", cotizacion: 1520, persona_asociada: "NP" },
+  { id: 4, fecha: "2026-08-03T14:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Lucas Moroni MacBook", monto: 1400, moneda: "USD", cotizacion: 1, persona_asociada: "Lucas Moroni" },
+  { id: 5, fecha: "2026-08-05T16:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "ENTRADA", categoria: "Venta", concepto: "Venta iPhone 17 Pro Max", monto: 700, moneda: "USD", cotizacion: 1520, persona_asociada: "NP" },
+  { id: 6, fecha: "2026-08-06T18:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Garden mayorista", monto: 600, moneda: "USD", cotizacion: 1, persona_asociada: "Garden" },
+  { id: 7, fecha: "2026-08-07T11:00:00.000Z", cuenta_id: 1, cuenta_nombre: "Caja Dólares", tipo_movimiento: "ENTRADA", categoria: "Compra USD", concepto: "Compra 200 USD efectivo", monto: 200, moneda: "USD", cotizacion: 1560, persona_asociada: "Administración" },
+  { id: 8, fecha: "2026-08-07T11:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Pesos", tipo_movimiento: "SALIDA", categoria: "Compra USD", concepto: "Egreso compra 200 USD x $1560", monto: 312000, moneda: "ARS", cotizacion: 1560, persona_asociada: "Administración" },
+  { id: 9, fecha: "2026-08-08T19:00:00.000Z", cuenta_id: 2, cuenta_nombre: "Caja Pesos", tipo_movimiento: "SALIDA", categoria: "Pago Proveedor", concepto: "Pago Garden repuestos", monto: 280000, moneda: "ARS", cotizacion: 1, persona_asociada: "Garden" }
 ];
 
 const movimientos_cc = [

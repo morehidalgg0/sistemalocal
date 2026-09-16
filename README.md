@@ -55,7 +55,7 @@ La aplicación abrirá en `http://localhost:3000`
    - Estados de orden: *En Taller*, *Listo para Retirar*, *Entregado y Cobrado*.
 
 6. **Cajas & Bancos Multidivisa**:
-   - Arqueo de Caja Fuerte USD, Caja Fuerte Pesos, Lemon Cash, Banco y Cara Chica.
+   - Arqueo de Caja Dólares, Caja Pesos, Lemon Cash, Banco y Cara Chica.
    - Operaciones de cambio de divisas (Compra/Venta de USD contra Pesos con cotización).
 
 7. **Cuentas Corrientes (CC)**:

@@ -80,7 +80,7 @@ CREATE TABLE IF NOT EXISTS ventas (
   comision_vendedor_pesos NUMERIC(12,2) DEFAULT 0,
   comision_vendedor_usd NUMERIC(12,2) DEFAULT 0,
   metodo_pago VARCHAR(50) DEFAULT 'Efectivo', -- 'Caja USD', 'Caja Pesos', 'Transferencia/Banco', 'Lemon', 'USDT', 'Mixto'
-  caja_destino VARCHAR(50) DEFAULT 'Caja Fuerte Dólares',
+  caja_destino VARCHAR(50) DEFAULT 'Caja Dólares',
   observaciones TEXT
 );
 
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS ventas (
 CREATE TABLE IF NOT EXISTS cuentas_caja (
   id SERIAL PRIMARY KEY,
   nombre VARCHAR(100) NOT NULL UNIQUE,
-  tipo VARCHAR(50) NOT NULL, -- 'Caja Fuerte USD', 'Caja Fuerte Pesos', 'Banco', 'Billetera Virtual', 'Cara Chica', 'Euros', 'Reales', 'USDT'
+  tipo VARCHAR(50) NOT NULL, -- 'Caja Dólares', 'Caja Pesos', 'Banco', 'Billetera Virtual', 'Cara Chica', 'Euros', 'Reales', 'USDT'
   moneda VARCHAR(10) NOT NULL, -- 'USD', 'ARS', 'USDT', 'EUR', 'BRL'
   saldo_inicial NUMERIC(14,2) DEFAULT 0,
   saldo_actual NUMERIC(14,2) DEFAULT 0,

@@ -16,8 +16,8 @@ module.exports = {
     { id: 7, nombre: "Lourdes", porcentaje_comision: 10, activo: true }
   ],
   cuentas_caja: [
-    { id: 1, nombre: "Caja Fuerte Dólares", tipo: "Caja Fuerte USD", moneda: "USD", saldo_inicial: 1470, saldo_actual: 1470, activo: true },
-    { id: 2, nombre: "Caja Fuerte Pesos", tipo: "Caja Fuerte Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 193200, activo: true },
+    { id: 1, nombre: "Caja Dólares", tipo: "Caja Dólares", moneda: "USD", saldo_inicial: 1470, saldo_actual: 1470, activo: true },
+    { id: 2, nombre: "Caja Pesos", tipo: "Caja Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 193200, activo: true },
     { id: 3, nombre: "Banco Galicia / Transferencias", tipo: "Banco", moneda: "ARS", saldo_inicial: 0, saldo_actual: 0, activo: true },
     { id: 4, nombre: "Lemon Cash / Cripto", tipo: "Billetera Virtual", moneda: "USDT", saldo_inicial: 0, saldo_actual: 0, activo: true },
     { id: 5, nombre: "Dólares Cara Chica", tipo: "Cara Chica", moneda: "USD", saldo_inicial: 0, saldo_actual: 0, activo: true },

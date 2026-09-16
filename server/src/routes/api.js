@@ -289,7 +289,7 @@ router.post('/ventas', (req, res) => {
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
     metodo_pago: req.body.metodo_pago || 'Efectivo USD',
-    caja_destino: req.body.caja_destino || 'Caja Fuerte Dólares',
+    caja_destino: req.body.caja_destino || 'Caja Dólares',
     observaciones: req.body.observaciones || ''
   };
 

@@ -8,6 +8,7 @@ export default function Cajas({ config, onDataChange }) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
+  const [cajaSeleccionada, setCajaSeleccionada] = useState(null); // caja activa para filtrar movimientos
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
@@ -129,7 +130,7 @@ export default function Cajas({ config, onDataChange }) {
             Cajas, Bancos & Tesorería
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Arqueo multidivisa en tiempo real: Caja Fuerte USD, Caja Pesos, Lemon Cash, Banco y cotizaciones.
+            Arqueo multidivisa en tiempo real: Caja Dólares, Caja Pesos, Lemon Cash, Banco y cotizaciones. Tocá una caja para ver sus últimas movimientos.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -158,40 +159,79 @@ export default function Cajas({ config, onDataChange }) {
 
       {/* Grid de Cajas y Cuentas Activas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {cajas.map(c => (
-          <div key={c.id} className="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl shadow-lg space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{c.tipo}</span>
-              <div className="p-2 bg-slate-800 rounded-xl">
-                {getIconForType(c.tipo)}
+        {cajas.map(c => {
+          const seleccionada = cajaSeleccionada?.id === c.id;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => {
+                setCajaSeleccionada(seleccionada ? null : c);
+                document.getElementById('libro-diario')?.scrollIntoView({ behavior: 'smooth' });
+              }}
+              className={`text-left bg-slate-900/90 border p-5 rounded-2xl shadow-lg space-y-3 cursor-pointer transition ${
+                seleccionada
+                  ? 'border-emerald-500/60 ring-2 ring-emerald-500/30 bg-slate-900'
+                  : 'border-slate-800 hover:border-sky-500/50 hover:bg-slate-800/60'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{c.tipo}</span>
+                <div className="p-2 bg-slate-800 rounded-xl">
+                  {getIconForType(c.tipo)}
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="text-sm font-bold text-white truncate">{c.nombre}</div>
-              <div className="text-2xl font-bold font-mono mt-1 text-emerald-400">
-                {c.moneda === 'USD' || c.moneda === 'USDT' ? `$${c.saldo_actual?.toLocaleString('es-AR')} ${c.moneda}` : `$${c.saldo_actual?.toLocaleString('es-AR')} ARS`}
+              <div>
+                <div className="text-sm font-bold text-white truncate">{c.nombre}</div>
+                <div className="text-2xl font-bold font-mono mt-1 text-emerald-400">
+                  {c.moneda === 'USD' || c.moneda === 'USDT' ? `$${c.saldo_actual?.toLocaleString('es-AR')} ${c.moneda}` : `$${c.saldo_actual?.toLocaleString('es-AR')} ARS`}
+                </div>
               </div>
-            </div>
-            <div className="text-[11px] text-slate-400 border-t border-slate-800/80 pt-2 flex items-center justify-between">
-              <span>Saldo Inicial:</span>
-              <span className="font-mono">${c.saldo_inicial?.toLocaleString('es-AR')}</span>
-            </div>
-          </div>
-        ))}
+              <div className="text-[11px] text-slate-400 border-t border-slate-800/80 pt-2 flex items-center justify-between">
+                <span className="flex items-center gap-1">
+                  {seleccionada && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                  <span>{seleccionada ? 'Mostrando movimientos' : 'Ver movimientos →'}</span>
+                </span>
+                <span className="font-mono">${c.saldo_inicial?.toLocaleString('es-AR')}</span>
+              </div>
+            </button>
+          );
+        })}
       </div>
 
       {/* Historial de Movimientos de Caja */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-200">Libro Diario de Caja y Movimientos ({movimientos.length})</h2>
-          <span className="text-xs text-slate-400 font-mono">Últimos registros</span>
+      <div id="libro-diario" className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+        <div className="p-4 border-b border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+          <h2 className="text-sm font-bold text-slate-200">
+            {cajaSeleccionada ? (
+              <>
+                <span className="text-emerald-400">Movimientos de {cajaSeleccionada.nombre}</span>
+                <span className="ml-2 text-slate-400 font-normal">({movimientosFiltrados.length})</span>
+              </>
+            ) : (
+              <>
+                Libro Diario de Caja y Movimientos
+                <span className="ml-2 text-slate-400 font-normal">({movimientosFiltrados.length})</span>
+              </>
+            )}
+          </h2>
+          {cajaSeleccionada ? (
+            <button
+              onClick={() => setCajaSeleccionada(null)}
+              className="text-xs px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:text-white hover:border-emerald-500/50 transition"
+            >
+              Ver todas las cajas
+            </button>
+          ) : (
+            <span className="text-xs text-slate-400 font-mono">Últimos registros</span>
+          )}
         </div>
 
         {loading ? (
           <div className="text-center py-12 text-slate-500">Cargando movimientos...</div>
-        ) : movimientos.length === 0 ? (
+        ) : movimientosFiltrados.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
-            No hay movimientos registrados.
+            {cajaSeleccionada ? `Sin movimientos registrados en ${cajaSeleccionada.nombre}.` : 'No hay movimientos registrados.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -207,9 +247,13 @@ export default function Cajas({ config, onDataChange }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {movimientos.map((m) => {
+                {movimientosFiltrados.map((m) => {
                   const isEntrada = m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA';
-                  return (
+const movimientosFiltrados = cajaSeleccionada
+    ? movimientos.filter(m => m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre)
+    : movimientos;
+
+  return (
                     <tr key={m.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                         {new Date(m.fecha).toLocaleDateString('es-AR')}
