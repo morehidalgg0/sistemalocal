@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect, useRef } from 'react';
-import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil } from 'lucide-react';
+import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil, Trash2 } from 'lucide-react';
 
 export default function Ventas({ config, onDataChange }) {
   const [ventas, setVentas] = useState([]);
@@ -177,6 +177,22 @@ export default function Ventas({ config, onDataChange }) {
       observaciones: v.observaciones || ''
     });
 setShowModal(true);
+  };
+
+  const handleDeleteVenta = async (v) => {
+    const detalle = v.item_detalle || 'venta';
+    const ok = window.confirm(`¿Borrar la venta "${detalle}"?\n\nSe revierte el stock (el equipo vuelve a "En Stock") y sale el dinero de la caja. Esta acción no se puede deshacer.`);
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/ventas/${v.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar la venta');
+      await fetchVentasData();
+      if (onDataChange) onDataChange();
+      alert('Venta eliminada. Stock y caja revertidos.');
+    } catch (err) {
+      console.error('Error eliminando venta:', err);
+      alert('No se pudo eliminar la venta. Probá de nuevo.');
+    }
   };
 
   const seleccionarCombo = (combo) => {
@@ -416,13 +432,22 @@ setShowModal(true);
                       {v.caja_destino}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
-                        onClick={() => handleEditVenta(v)}
-                        title="Editar venta"
-                        className="p-2 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleEditVenta(v)}
+                          title="Editar venta"
+                          className="p-2 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteVenta(v)}
+                          title="Borrar venta (revierte stock y caja)"
+                          className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

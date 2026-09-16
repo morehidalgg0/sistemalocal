@@ -713,6 +713,60 @@ app.put("/api/ventas/:id", async (req, res) => {
   res.json({ success: true, venta: updated });
 });
 
+// Elimina una venta revirtiendo su impacto: el dispositivo vuelve a stock y el dinero sale de la caja.
+app.delete("/api/ventas/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const idx = (memStore.ventas || []).findIndex(v => v.id === id);
+  if (idx === -1) return res.status(404).json({ error: "Venta no encontrada" });
+  const old = memStore.ventas[idx];
+  const refVenta = `VENTA-#${id}`;
+
+  // Revertir dinero en caja (memStore)
+  const esMovDeVenta = (m) => m.comprobante_ref === refVenta ||
+    (m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle));
+  const movsARevertir = (memStore.caja_movimientos || []).filter(esMovDeVenta);
+  movsARevertir.forEach(m => {
+    const caja = (memStore.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
+    if (caja) caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
+  });
+  if (movsARevertir.length > 0) {
+    memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !esMovDeVenta(m));
+  }
+
+  // Volver el dispositivo a stock
+  if (old.dispositivo_id) {
+    const dIdx = (memStore.dispositivos || []).findIndex(d => d.id === parseInt(old.dispositivo_id));
+    if (dIdx !== -1 && memStore.dispositivos[dIdx].estado === "Vendido") memStore.dispositivos[dIdx].estado = "En Stock";
+  }
+  memStore.ventas.splice(idx, 1);
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [refVenta]).catch(() => null);
+        if ((!movPG || !movPG.rows || movPG.rows.length === 0) && old.item_detalle) {
+          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2", [old.caja_destino, "%" + (old.item_detalle || "") + "%"]).catch(() => null);
+        }
+        if (movPG && movPG.rows && movPG.rows.length > 0) {
+          for (const m of movPG.rows) {
+            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [parseFloat(m.monto) || 0, m.cuenta_id]).catch(() => {});
+            await q("DELETE FROM caja_movimientos WHERE id=$1", [m.id]).catch(() => {});
+          }
+        }
+        if (old.dispositivo_id) {
+          await q("UPDATE dispositivos SET estado='En Stock' WHERE id=$1 AND estado='Vendido'", [parseInt(old.dispositivo_id)]).catch(() => {});
+        }
+        await q("DELETE FROM ventas WHERE id=$1", [id]).catch(() => {});
+      } catch (e) {
+        console.warn("DELETE ventas -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, id });
+});
+
 app.get("/api/cajas", async (req, res) => {
   try {
     const r = await q("SELECT * FROM cuentas_caja ORDER BY id");
