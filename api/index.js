@@ -582,11 +582,27 @@ app.post("/api/ventas", async (req, res) => {
 
 app.put("/api/ventas/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const idx = (memStore.ventas || []).findIndex(v => v.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Venta no encontrada" });
-
-  const old = memStore.ventas[idx];
   const b = req.body;
+
+  // Fuente de verdad: Postgres primero (evita 404 por instancia serverless con memStore frío)
+  let old = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM ventas WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) old = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("PUT ventas -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!old) {
+    const idx = (memStore.ventas || []).findIndex(v => v.id === id);
+    if (idx !== -1) old = memStore.ventas[idx];
+  }
+  if (!old) return res.status(404).json({ error: "Venta no encontrada" });
+
   const dolar = parseFloat(b.cotizacion_dolar) || parseFloat(memStore.configuracion?.dolar_blue || 1480);
   const precioUSD = parseFloat(b.precio_venta_usd) || (parseFloat(b.precio_venta_pesos) / dolar) || 0;
   const precioPesos = parseFloat(b.precio_venta_pesos) || (precioUSD * dolar) || 0;
@@ -643,7 +659,8 @@ app.put("/api/ventas/:id", async (req, res) => {
     observaciones: b.observaciones ?? old.observaciones,
     updated_at: new Date().toISOString()
   };
-  memStore.ventas[idx] = updated;
+  const idx = (memStore.ventas || []).findIndex(v => v.id === id);
+  if (idx !== -1) memStore.ventas[idx] = updated;
 
   // Aplicar nuevo impacto a caja
   if (b.impactar_caja !== false) {
@@ -716,12 +733,29 @@ app.put("/api/ventas/:id", async (req, res) => {
 // Elimina una venta revirtiendo su impacto: el dispositivo vuelve a stock y el dinero sale de la caja.
 app.delete("/api/ventas/:id", async (req, res) => {
   const id = parseInt(req.params.id);
-  const idx = (memStore.ventas || []).findIndex(v => v.id === id);
-  if (idx === -1) return res.status(404).json({ error: "Venta no encontrada" });
-  const old = memStore.ventas[idx];
+
+  // Fuente de verdad: Postgres primero (evita 404 por instancia serverless con memStore frío)
+  let old = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM ventas WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) { old = numericize(r.rows[0]); }
+      } catch (e) {
+        console.warn("DELETE ventas -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!old) {
+    const idx = (memStore.ventas || []).findIndex(v => v.id === id);
+    old = idx !== -1 ? memStore.ventas[idx] : null;
+  }
+  if (!old) return res.status(404).json({ error: "Venta no encontrada" });
+
   const refVenta = `VENTA-#${id}`;
 
-  // Revertir dinero en caja (memStore)
+  // Revertir dinero en caja y stock en (memStore), por consistencia de la instancia
   const esMovDeVenta = (m) => m.comprobante_ref === refVenta ||
     (m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle));
   const movsARevertir = (memStore.caja_movimientos || []).filter(esMovDeVenta);
@@ -732,13 +766,12 @@ app.delete("/api/ventas/:id", async (req, res) => {
   if (movsARevertir.length > 0) {
     memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !esMovDeVenta(m));
   }
-
-  // Volver el dispositivo a stock
   if (old.dispositivo_id) {
     const dIdx = (memStore.dispositivos || []).findIndex(d => d.id === parseInt(old.dispositivo_id));
     if (dIdx !== -1 && memStore.dispositivos[dIdx].estado === "Vendido") memStore.dispositivos[dIdx].estado = "En Stock";
   }
-  memStore.ventas.splice(idx, 1);
+  const memIdx = (memStore.ventas || []).findIndex(v => v.id === id);
+  if (memIdx !== -1) memStore.ventas.splice(memIdx, 1);
 
   if (process.env.DATABASE_URL) {
     await getPool();
@@ -746,7 +779,7 @@ app.delete("/api/ventas/:id", async (req, res) => {
       try {
         let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [refVenta]).catch(() => null);
         if ((!movPG || !movPG.rows || movPG.rows.length === 0) && old.item_detalle) {
-          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2", [old.caja_destino, "%" + (old.item_detalle || "") + "%"]).catch(() => null);
+          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2", [old.caja_destino || "Caja Dólares", "%" + (old.item_detalle || "") + "%"]).catch(() => null);
         }
         if (movPG && movPG.rows && movPG.rows.length > 0) {
           for (const m of movPG.rows) {
