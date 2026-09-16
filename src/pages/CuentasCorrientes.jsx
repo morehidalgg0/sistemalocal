@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2, Smartphone } from 'lucide-react';
+import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2, Smartphone, Search } from 'lucide-react';
 
 export default function CuentasCorrientes({ config, onDataChange }) {
   const [entidades, setEntidades] = useState([]);
@@ -11,6 +11,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
   const [showEntidadModal, setShowEntidadModal] = useState(false);
   const [editandoEntidad, setEditandoEntidad] = useState(null);
   const [showMovModal, setShowMovModal] = useState(false);
+  const [busquedaEntidad, setBusquedaEntidad] = useState('');
+  const [busquedaMov, setBusquedaMov] = useState('');
 
   // Form Movimiento CC
   const [movForm, setMovForm] = useState({
@@ -158,6 +160,27 @@ export default function CuentasCorrientes({ config, onDataChange }) {
     }
   };
 
+  // Filtros de búsqueda
+  const qEnt = busquedaEntidad.trim().toLowerCase();
+  const entidadesFiltradas = entidades.filter(e =>
+    !qEnt ||
+    (e.nombre || '').toLowerCase().includes(qEnt) ||
+    (e.contacto || '').toLowerCase().includes(qEnt) ||
+    (e.tipo || '').toLowerCase().includes(qEnt)
+  );
+
+  const qMov = busquedaMov.trim().toLowerCase();
+  const movsVisibles = (movimientos || [])
+    .filter(m => !qMov || (m.concepto || '').toLowerCase().includes(qMov))
+    .sort((a, b) => {
+      const fa = a.fecha ? new Date(a.fecha).getTime() : 0;
+      const fb = b.fecha ? new Date(b.fecha).getTime() : 0;
+      if (fa && fb) return fb - fa;
+      if (fa && !fb) return -1;
+      if (!fa && fb) return 1;
+      return b.id - a.id;
+    });
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -185,11 +208,22 @@ export default function CuentasCorrientes({ config, onDataChange }) {
         {/* Lista de Cuentas Corrientes */}
         <div className="lg:col-span-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-3 max-h-[75vh] overflow-y-auto">
           <div className="text-xs font-bold text-slate-400 uppercase tracking-wider px-2">
-            Cuentas Registradas ({entidades.length})
+            Cuentas Registradas ({entidadesFiltradas.length})
+          </div>
+
+          <div className="relative px-1">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={busquedaEntidad}
+              onChange={e => setBusquedaEntidad(e.target.value)}
+              placeholder="Buscar cuenta, contacto o tipo..."
+              className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
           </div>
 
           <div className="space-y-2">
-            {entidades.map(ent => {
+            {entidadesFiltradas.map(ent => {
               const isSelected = selectedEntidad?.id === ent.id;
               const deuda = parseFloat(ent.saldo_adeudado) || 0;
               return (
@@ -271,7 +305,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
 
               {/* Movimientos de la Cuenta */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                   <h3 className="text-sm font-bold text-slate-300">Detalle de Equipos / Operaciones</h3>
                   {movimientos.length > 0 && (
                     <span className="text-[11px] text-slate-500">
@@ -280,13 +314,28 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   )}
                 </div>
 
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={busquedaMov}
+                    onChange={e => setBusquedaMov(e.target.value)}
+                    placeholder="Buscar equipo, fecha u operación..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
                 {movimientos.length === 0 ? (
                   <div className="text-center py-8 text-slate-500 text-sm bg-slate-800/20 rounded-xl border border-slate-800">
                     No hay equipos ni operaciones registradas para esta cuenta aún.
                   </div>
+                ) : movsVisibles.length === 0 ? (
+                  <div className="text-center py-8 text-slate-500 text-sm bg-slate-800/20 rounded-xl border border-slate-800">
+                    No se encontraron resultados para "{busquedaMov.trim()}".
+                  </div>
                 ) : (
                   <div className="space-y-2">
-                    {movimientos.slice().reverse().map(m => {
+                    {movsVisibles.map(m => {
                       const esCargo = m.tipo === 'ENTREGA_EQUIPO' || m.tipo === 'SERVICIO_TECNICO';
                       const esEquipo = m.tipo === 'ENTREGA_EQUIPO';
                       return (
