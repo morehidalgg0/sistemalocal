@@ -891,9 +891,26 @@ app.get("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
 app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
   const id = parseInt(req.params.id);
   const b = req.body;
-  const eIdx = (memStore.entidades_cc || []).findIndex(e => e.id === id);
-  if (eIdx === -1) return res.status(404).json({ error: "Entidad no encontrada" });
-  const e = memStore.entidades_cc[eIdx];
+
+  // Fuente de verdad: Postgres primero (evita 404 por instancia serverless con memStore frío)
+  let e = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM entidades_cc WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) e = numericize(r.rows[0]);
+      } catch (err) {
+        console.warn("POST movimiento CC -> PG select:", err.message);
+      }
+    }
+  }
+  if (!e) {
+    const eIdx = (memStore.entidades_cc || []).findIndex(ent => ent.id === id);
+    if (eIdx !== -1) e = memStore.entidades_cc[eIdx];
+  }
+  if (!e) return res.status(404).json({ error: "Entidad no encontrada" });
+
   const monto = parseFloat(b.monto) || 0;
   let nuevoSaldo = parseFloat(e.saldo_adeudado) || 0;
   if (b.tipo === "ENTREGA_EQUIPO" || b.tipo === "SERVICIO_TECNICO") nuevoSaldo += monto;
@@ -911,6 +928,8 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
     saldo_resultante: nuevoSaldo,
     observaciones: b.observaciones || ""
   };
+  const eIdxMem = (memStore.entidades_cc || []).findIndex(ent => ent.id === id);
+  if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = nuevoSaldo;
   memStore.movimientos_cc = [newMov, ...(memStore.movimientos_cc || [])];
 
   if (process.env.DATABASE_URL) {
@@ -930,6 +949,80 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
   }
 
   res.json({ success: true, movimiento: newMov, entidad_actualizada: e });
+});
+
+app.put("/api/cuentas-corrientes/:id/movimientos/:movId", async (req, res) => {
+  const entidadId = parseInt(req.params.id);
+  const movId = parseInt(req.params.movId);
+  const b = req.body;
+
+  // Fuente de verdad: Postgres primero
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM movimientos_cc WHERE id=$1 AND entidad_id=$2", [movId, entidadId]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (err) {
+        console.warn("PUT movimiento CC -> PG select:", err.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.movimientos_cc || []).find(m => m.id === movId && m.entidad_id === entidadId) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+
+  const esCarga = (t) => t === "ENTREGA_EQUIPO" || t === "SERVICIO_TECNICO";
+  const nuevoTipo = b.tipo || mov.tipo;
+  const nuevoMonto = (b.monto !== undefined && b.monto !== "") ? (parseFloat(b.monto) || 0) : (parseFloat(mov.monto) || 0);
+
+  const updated = {
+    ...mov,
+    fecha: (b.fecha !== undefined && b.fecha !== "") ? b.fecha : (b.fecha === "" ? null: mov.fecha),
+    tipo: nuevoTipo,
+    concepto: b.concepto !== undefined ? b.concepto : mov.concepto,
+    monto: nuevoMonto,
+    moneda: b.moneda || mov.moneda || "USD"
+  };
+
+  // Recalcular el saldo_resultante de esta fila a partir del movimiento anterior (por id ascendente).
+  // No se modifica el saldo_adeudado de la entidad a propósito.
+  let prevSaldo = 0;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT saldo_resultante FROM movimientos_cc WHERE entidad_id=$1 AND id<$2 ORDER BY id DESC LIMIT 1", [entidadId, movId]).catch(() => null);
+        if (r && r.rows && r.rows[0]) prevSaldo = parseFloat(r.rows[0].saldo_resultante) || 0;
+      } catch (err) {
+        console.warn("PUT movimiento CC -> PG prev:", err.message);
+      }
+    }
+  }
+  if (!prevSaldo) {
+    const prev = (memStore.movimientos_cc || []).filter(m => m.entidad_id === entidadId && m.id < movId).sort((a, c) => c.id - a.id)[0];
+    if (prev) prevSaldo = parseFloat(prev.saldo_resultante) || 0;
+  }
+  updated.saldo_resultante = prevSaldo + (esCarga(nuevoTipo) ? nuevoMonto : -nuevoMonto);
+
+  const memIdx = (memStore.movimientos_cc || []).findIndex(m => m.id === movId && m.entidad_id === entidadId);
+  if (memIdx !== -1) memStore.movimientos_cc[memIdx] = updated;
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        await q("UPDATE movimientos_cc SET fecha=$1, tipo=$2, concepto=$3, monto=$4, moneda=$5, saldo_resultante=$6 WHERE id=$7",
+          [updated.fecha, updated.tipo, updated.concepto || "", updated.monto, updated.moneda, updated.saldo_resultante, movId]).catch(() => {});
+      } catch (err) {
+        console.warn("PUT movimiento CC -> PG error:", err.message);
+      }
+    }
+  }
+
+  res.json({ success: true, movimiento: updated });
 });
 
 app.post("/api/cuentas-corrientes", async (req, res) => {

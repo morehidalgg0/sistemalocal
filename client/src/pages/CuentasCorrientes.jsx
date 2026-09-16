@@ -20,9 +20,11 @@ export default function CuentasCorrientes({ config, onDataChange }) {
     tipo: 'PAGO_REALIZADO', // 'PAGO_REALIZADO', 'ENTREGA_EQUIPO', 'AJUSTE'
     concepto: '',
     monto: '',
+    fecha: '',
     impactar_caja: false,
     caja_id: ''
   });
+  const [editandoMov, setEditandoMov] = useState(null);
 
   // Form Nueva Entidad
   const [entidadForm, setEntidadForm] = useState({
@@ -140,24 +142,49 @@ export default function CuentasCorrientes({ config, onDataChange }) {
     }
   };
 
+  const resetMovForm = () => setMovForm({ tipo: 'PAGO_REALIZADO', concepto: '', monto: '', fecha: '', impactar_caja: false, caja_id: '' });
+
+  const openNewMov = () => {
+    setEditandoMov(null);
+    resetMovForm();
+    setShowMovModal(true);
+  };
+
+  const openEditMov = (m) => {
+    setEditandoMov(m);
+    setMovForm({
+      tipo: m.tipo,
+      concepto: m.concepto || '',
+      monto: String(m.monto ?? ''),
+      fecha: m.fecha ? String(m.fecha).slice(0, 10) : '',
+      impactar_caja: false,
+      caja_id: ''
+    });
+    setShowMovModal(true);
+  };
+
   const handleCreateMovimiento = async (e) => {
     e.preventDefault();
     if (!selectedEntidad) return;
     try {
-      const res = await fetch(`/api/cuentas-corrientes/${selectedEntidad.id}/movimientos`, {
-        method: 'POST',
+      const url = editandoMov
+        ? `/api/cuentas-corrientes/${selectedEntidad.id}/movimientos/${editandoMov.id}`
+        : `/api/cuentas-corrientes/${selectedEntidad.id}/movimientos`;
+      const res = await fetch(url, {
+        method: editandoMov ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(movForm)
+        body: JSON.stringify(editandoMov ? { tipo: movForm.tipo, concepto: movForm.concepto, monto: movForm.monto, fecha: movForm.fecha } : movForm)
       });
       if (res.ok) {
         setShowMovModal(false);
-        setMovForm({ tipo: 'PAGO_REALIZADO', concepto: '', monto: '', impactar_caja: false, caja_id: '' });
+        setEditandoMov(null);
+        resetMovForm();
         fetchEntidades();
         selectEntidad(selectedEntidad);
         if (onDataChange) onDataChange();
       }
     } catch (err) {
-      console.error("Error creando movimiento CC:", err);
+      console.error("Error guardando movimiento CC:", err);
     }
   };
 
@@ -289,7 +316,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   </button>
 
                   <button
-                    onClick={() => setShowMovModal(true)}
+                    onClick={openNewMov}
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center gap-2 text-sm"
                   >
                     <Plus className="w-4 h-4" />
@@ -344,24 +371,31 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                     {movsVisibles.map(m => {
                       const esCargo = m.tipo === 'ENTREGA_EQUIPO' || m.tipo === 'SERVICIO_TECNICO';
                       const esEquipo = m.tipo === 'ENTREGA_EQUIPO';
+                      const esAjuste = m.tipo === 'AJUSTE';
+                      const rowStyle = esCargo
+                        ? 'bg-slate-800/30 border-slate-800 hover:border-sky-600/40'
+                        : esAjuste
+                          ? 'bg-amber-500/5 border-slate-800 hover:border-amber-500/40'
+                          : 'bg-emerald-500/5 border-slate-800 hover:border-emerald-500/40';
+                      const iconStyle = esCargo
+                        ? 'bg-sky-500/10 text-sky-400'
+                        : esAjuste
+                          ? 'bg-amber-500/10 text-amber-400'
+                          : 'bg-emerald-500/10 text-emerald-400';
                       return (
                         <div
                           key={m.id}
-                          className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border transition ${
-                            esCargo
-                              ? 'bg-slate-800/30 border-slate-800 hover:border-sky-600/40'
-                              : 'bg-emerald-500/5 border-slate-800 hover:border-emerald-500/40'
-                          }`}
+                          className={`flex items-center justify-between gap-3 p-3.5 rounded-xl border transition ${rowStyle}`}
                         >
                           <div className="flex items-start gap-3 min-w-0">
-                            <div className={`p-2 rounded-lg shrink-0 ${esCargo ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                              {esEquipo ? <Smartphone className="w-4 h-4" /> : (esCargo ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}
+                            <div className={`p-2 rounded-lg shrink-0 ${iconStyle}`}>
+                              {esEquipo ? <Smartphone className="w-4 h-4" /> : esAjuste ? <DollarSign className="w-4 h-4" /> : (esCargo ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />)}
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] text-slate-500">{m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '—'}</span>
-                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${esCargo ? 'bg-sky-500/10 text-sky-400' : 'bg-emerald-500/10 text-emerald-400'}`}>
-                                  {esEquipo ? 'Entrega de Equipo' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${iconStyle}`}>
+                                  {esEquipo ? 'Entrega de Equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
                                 </span>
                               </div>
                               <div className={`font-semibold text-sm text-white truncate mt-0.5 ${esEquipo ? 'flex items-center gap-1.5' : ''}`}>
@@ -373,9 +407,18 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                               </div>
                             </div>
                           </div>
-                          <div className={`text-right shrink-0 font-bold font-mono ${esCargo ? 'text-rose-400' : 'text-emerald-400'}`}>
-                            {esCargo ? '+' : '-'}${m.monto?.toLocaleString('es-AR')}
-                            <span className="block text-[10px] font-sans font-normal text-slate-500">{m.moneda}</span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div className={`text-right font-bold font-mono ${esCargo ? 'text-rose-400' : esAjuste ? 'text-amber-400' : 'text-emerald-400'}`}>
+                              {esAjuste ? `$${m.monto?.toLocaleString('es-AR')}` : `${esCargo ? '+' : '-'}$${m.monto?.toLocaleString('es-AR')}`}
+                              <span className="block text-[10px] font-sans font-normal text-slate-500">{m.moneda}</span>
+                            </div>
+                            <button
+                              onClick={() => openEditMov(m)}
+                              title="Editar detalle"
+                              className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-white hover:border-indigo-500 transition"
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
                       );
@@ -395,8 +438,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Operación con {selectedEntidad.nombre}</h3>
-              <button onClick={() => setShowMovModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h3 className="text-lg font-bold text-white">{editandoMov ? 'Editar detalle · ' : 'Operación con '}{selectedEntidad.nombre}</h3>
+              <button onClick={() => { setShowMovModal(false); setEditandoMov(null); resetMovForm(); }} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
             <form onSubmit={handleCreateMovimiento} className="space-y-4">
@@ -409,6 +452,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                 >
                   <option value="PAGO_REALIZADO">🟢 PAGO (Resta de la deuda)</option>
                   <option value="ENTREGA_EQUIPO">🔴 INGRESA EQUIPO (Suma a la deuda)</option>
+                  <option value="AJUSTE">⚪ AJUSTE / CORRECCIÓN</option>
                 </select>
               </div>
 
@@ -424,9 +468,15 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                 />
               </div>
 
-              {movForm.tipo === 'ENTREGA_EQUIPO' && (
+              {movForm.tipo === 'ENTREGA_EQUIPO' && !editandoMov && (
                 <div className="text-[11px] text-sky-400/90 bg-sky-500/5 border border-sky-600/20 rounded-lg px-3 py-2">
                   El monto de este equipo se <b>suma automáticamente</b> al total de la cuenta corriente.
+                </div>
+              )}
+
+              {editandoMov && (
+                <div className="text-[11px] text-amber-400/90 bg-amber-500/5 border border-amber-600/20 rounded-lg px-3 py-2">
+                  Editás este detalle sin modificar el total de la cuenta (las correcciones de total se hacen con un movimiento de AJUSTE).
                 </div>
               )}
 
@@ -443,7 +493,20 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                 />
               </div>
 
-              {movForm.tipo === 'PAGO_REALIZADO' && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Fecha (opcional)</label>
+                <input
+                  type="date"
+                  value={movForm.fecha}
+                  onChange={e => setMovForm({ ...movForm, fecha: e.target.value })}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                />
+                <span className="block text-[11px] text-slate-500 mt-1">
+                  {editandoMov ? 'Dejalo vacío para conservar "sin fecha".' : 'Si lo dejás vacío se registra con la fecha de hoy.'}
+                </span>
+              </div>
+
+              {!editandoMov && movForm.tipo === 'PAGO_REALIZADO' && (
                 <div className="space-y-2 p-3 bg-slate-800/40 rounded-xl border border-slate-800">
                   <div className="flex items-center gap-2">
                     <input
@@ -474,9 +537,9 @@ export default function CuentasCorrientes({ config, onDataChange }) {
               )}
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setShowMovModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
+                <button type="button" onClick={() => { setShowMovModal(false); setEditandoMov(null); resetMovForm(); }} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
                 <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm">
-                  Guardar
+                  {editandoMov ? 'Guardar Cambios' : 'Guardar'}
                 </button>
               </div>
             </form>
