@@ -102,3 +102,6 @@ html.light .text-sky-400 { color: #0284c7; }
 html.light .text-indigo-400 { color: #4f46e5; }
 html.light .text-amber-400 { color: #d97706; }
 html.light .text-rose-400 { color: #e11d48; }
+
+/* Línea de accesorios/regalos en Ventas: en claro queda amarilla (text-amber-400/90 no la cubría) → texto oscuro */
+html.light .text-amber-400\/90 { color: rgb(var(--np-slate-100)); }
