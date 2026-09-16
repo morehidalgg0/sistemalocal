@@ -264,7 +264,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                     className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/30 transition flex items-center gap-2 text-sm"
                   >
                     <Plus className="w-4 h-4" />
-                    Registrar Pago / Entrega
+                    Pago / Ingresar Equipo
                   </button>
                 </div>
               </div>
@@ -352,8 +352,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   onChange={e => setMovForm({ ...movForm, tipo: e.target.value })}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                 >
-                  <option value="PAGO_REALIZADO">🟢 PAGO REALIZADO (Resta de la deuda)</option>
-                  <option value="ENTREGA_EQUIPO">🔴 ENTREGA DE EQUIPO / CARGO (Suma a la deuda)</option>
+                  <option value="PAGO_REALIZADO">🟢 PAGO (Resta de la deuda)</option>
+                  <option value="ENTREGA_EQUIPO">🔴 INGRESA EQUIPO (Suma a la deuda)</option>
                 </select>
               </div>
 
