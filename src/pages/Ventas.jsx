@@ -1,9 +1,15 @@
 import fallbackData from "../data/fallbackData";
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil, Trash2 } from 'lucide-react';
 
 export default function Ventas({ config, onDataChange }) {
+  const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  const keyMes = (f) => { const d = f ? new Date(f) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const labelMes = (k) => { const [y, m] = String(k || '').split('-'); const nombre = MESES_NOMBRES[parseInt(m, 10) - 1] || k; return String(y) === String(new Date().getFullYear()) ? nombre : `${nombre} ${y}`; };
+
   const [ventas, setVentas] = useState([]);
+  const [mesSeleccionado, setMesSeleccionado] = useState(null);
+  const mesInitRef = useRef(false);
   const [dispositivosStock, setDispositivosStock] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [cajas, setCajas] = useState([]);
@@ -109,6 +115,16 @@ export default function Ventas({ config, onDataChange }) {
       setLoading(false);
     }
   };
+
+  // Al primer cargar de ventas, fijar el mes por defecto: el último mes cerrado (ej: AGOSTO)
+  useEffect(() => {
+    if (mesInitRef.current || !ventas || ventas.length === 0) return;
+    mesInitRef.current = true;
+    const keys = [...new Set(ventas.map(v => keyMes(v.fecha)))];
+    const hoy = keyMes();
+    const previos = keys.filter(k => k < hoy).sort();
+    setMesSeleccionado(previos.length ? previos[previos.length - 1] : hoy);
+  }, [ventas]);
 
   // Al seleccionar un teléfono de la lista visual
   const handleSelectDispositivo = (disp) => {
@@ -327,6 +343,15 @@ setShowModal(true);
     (d.capacidad && d.capacidad.toLowerCase().includes(searchDispositivo.toLowerCase()))
   );
 
+  const mesesDisponibles = useMemo(() => {
+    const keys = [...new Set((ventas || []).map(v => keyMes(v.fecha)))];
+    const hoy = keyMes();
+    if (!keys.includes(hoy)) keys.push(hoy);
+    return keys.sort().reverse().map(k => ({ key: k, label: labelMes(k) }));
+  }, [ventas]);
+
+  const ventasMes = mesSeleccionado ? (ventas || []).filter(v => keyMes(v.fecha) === mesSeleccionado) : (ventas || []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -356,10 +381,24 @@ setShowModal(true);
 
       {/* Historial de Ventas */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-          <div className="text-sm font-bold text-slate-200">Historial de Ventas ({ventas.length})</div>
+        <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="text-sm font-bold text-slate-200 flex items-center flex-wrap gap-2">
+            Historial de Ventas
+            <select
+              value={mesSeleccionado || ''}
+              onChange={(e) => setMesSeleccionado(e.target.value)}
+              title="Filtrar por mes"
+              className="bg-slate-800 border border-slate-700 text-white text-sm font-bold rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+            >
+              {mesesDisponibles.length === 0 && <option value="">SELECCIONAR MES</option>}
+              {mesesDisponibles.map(o => (
+                <option key={o.key} value={o.key}>{o.label}</option>
+              ))}
+            </select>
+            <span className="text-slate-400 font-normal">({ventasMes.length})</span>
+          </div>
           <div className="text-xs text-slate-400">
-            Ganancia Total: <span className="text-emerald-400 font-bold">${ventas.reduce((acc, v) => acc + (parseFloat(v.ganancia_usd) || 0), 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+            Ganancia Total: <span className="text-emerald-400 font-bold">${ventasMes.reduce((acc, v) => acc + (parseFloat(v.ganancia_usd) || 0), 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
           </div>
         </div>
 
@@ -368,6 +407,10 @@ setShowModal(true);
         ) : ventas.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
             Aún no has registrado ninguna venta. Haz clic en "Nueva Venta" para comenzar.
+          </div>
+        ) : ventasMes.length === 0 ? (
+          <div className="text-center py-12 text-slate-500 text-sm">
+            No hay ventas en <span className="text-slate-300 font-semibold">{labelMes(mesSeleccionado)}</span>. Elegí "Nueva Venta" para cargar una.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -387,7 +430,7 @@ setShowModal(true);
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {ventas.slice().reverse().map((v) => (
+                {ventasMes.slice().reverse().map((v) => (
                   <tr key={v.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                       {new Date(v.fecha).toLocaleDateString('es-AR')}
