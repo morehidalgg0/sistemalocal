@@ -61,7 +61,8 @@ const COLUMNS_NUMERICAS = new Set([
   "monto", "cotizacion", "saldo_adeudado", "saldo_resultante", "stock_actual",
   "stock_minimo", "porcentaje_comision", "costo_repuesto_usd", "costo_repuesto_pesos",
   "mano_obra_usd", "mano_obra_pesos", "total_presupuesto_usd", "total_presupuesto_pesos",
-  "dia_vencimiento", "monto_original", "monto_pendiente", "valor_usd", "valor_pesos"
+  "dia_vencimiento", "monto_original", "monto_pendiente", "valor_usd", "valor_pesos",
+  "regalo_costo_snapshot_usd"
 ]);
 function numericize(row) {
   if (!row) return row;
@@ -72,16 +73,71 @@ function numericize(row) {
   return out;
 }
 
+// Ajusta la ganancia de ventas que tienen accesorios bonificados (regalo_componentes):
+// usa el costo ACTUAL de esos accesorios en el stock, no el valor congelado al momento de vender.
+async function recomponerGananciaRegalos(rows) {
+  if (!rows || rows.length === 0) return rows;
+  const conRegalo = rows.filter(v => v && v.regalo_componentes);
+  if (conRegalo.length === 0) return rows;
+
+  let items = [];
+  try {
+    const r = await q("SELECT nombre, costo_usd, costo_pesos, stock_actual FROM inventario_items");
+    if (r.rows && r.rows.length > 0) items = r.rows;
+  } catch (e) {
+    items = memStore.inventario_items || [];
+  }
+
+  const kwCosts = {};
+  const getKwCost = (kw) => {
+    if (!(kw in kwCosts)) {
+      if (items.length === 0) {
+        kwCosts[kw] = 0;
+      } else {
+        const match = items
+          .filter(i => (parseInt(i.stock_actual) || 0) > 0 && i.nombre && i.nombre.toLowerCase().includes(kw))
+          .sort((a, b) => (parseFloat(a.costo_usd) || 0) - (parseFloat(b.costo_usd) || 0))[0];
+        kwCosts[kw] = match ? (parseFloat(match.costo_usd) || (parseFloat(match.costo_pesos) || 0) / 1480 || 0) : 0;
+      }
+    }
+    return kwCosts[kw] || 0;
+  };
+
+  rows.forEach(v => {
+    if (!v || !v.regalo_componentes) return;
+    let kws = [];
+    try {
+      const parsed = JSON.parse(v.regalo_componentes);
+      kws = Array.isArray(parsed) ? parsed.map(s => String(s).toLowerCase().trim()).filter(Boolean) : [];
+    } catch (e) {
+      kws = String(v.regalo_componentes).split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+    }
+    const accNow = kws.reduce((sum, kw) => sum + getKwCost(kw), 0);
+    const snapshot = parseFloat(v.regalo_costo_snapshot_usd) || 0;
+    const manual = parseFloat(v.descuento_monto) || 0;
+    const descEfectivo = manual - snapshot + accNow;
+    const cotiz = parseFloat(v.cotizacion_dolar) || 1480;
+    const precioUSD = parseFloat(v.precio_venta_usd) || (parseFloat(v.precio_venta_pesos) || 0) / cotiz;
+    const gan = precioUSD - (parseFloat(v.costo_total_usd) || 0) - (parseFloat(v.costo_reparacion) || 0) - descEfectivo;
+    v.ganancia_usd = gan;
+    v.ganancia_pesos = gan * cotiz;
+    v.descuento_accesorios_usd = accNow;
+    v.descuento_efectivo_usd = descEfectivo;
+  });
+  return rows;
+}
+
 // Persiste una venta en Postgres (solo si la DB está disponible) y ajusta caja/dispositivo en la DB.
 // Reasigna venta.id al id serial real si la fila se inserta ahora.
 async function persistVentaPG(venta, impactarCaja) {
   if (!isPostgresAvailable) return;
-  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, observaciones";
+  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, regalo_componentes, regalo_costo_snapshot_usd, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, observaciones";
   const v = [
     venta.fecha, venta.dispositivo_id, venta.item_detalle || "", venta.cliente_nombre || "", venta.cliente_contacto || "",
     venta.vendedor_nombre || "NP", venta.precio_venta_usd, venta.precio_venta_pesos, venta.cotizacion_dolar,
     venta.costo_total_usd, venta.costo_total_pesos, venta.costo_reparacion, venta.descuentos_regalos_detalle || "",
-    venta.descuento_monto, venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
+    venta.descuento_monto, venta.regalo_componentes || null, venta.regalo_costo_snapshot_usd || 0,
+    venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
     venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Fuerte Dólares",
     venta.observaciones || ""
   ];
@@ -244,9 +300,10 @@ app.get("/api/dashboard", async (req, res) => {
       else if (c.moneda === "ARS") saldoARS += parseFloat(c.saldo_actual);
     });
     const totalLiquido = saldoUSD + saldoARS / dolar;
-    const ventas = await q("SELECT ganancia_usd FROM ventas");
-    const gananciaMes = ventas.rows.reduce((a, v) => a + (parseFloat(v.ganancia_usd) || 0), 0);
-    const totalVendidos = ventas.rows.length;
+const ventasRaw = await q("SELECT * FROM ventas");
+    const ventas = await recomponerGananciaRegalos(ventasRaw.rows.map(numericize));
+    const gananciaMes = ventas.reduce((a, v) => a + (parseFloat(v.ganancia_usd) || 0), 0);
+    const totalVendidos = ventas.length;
     const promedio = totalVendidos > 0 ? gananciaMes / totalVendidos : 0;
 
     const deudores = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo='DEUDOR' AND estado!='Cancelado'");
@@ -279,7 +336,7 @@ app.get("/api/dashboard", async (req, res) => {
       },
       equiposEnStock: parseInt(dispEnStock.rows[0].c),
       reparacionesActivas: parseInt(repActivas.rows[0].c),
-      ultimasVentas: ultimasVentas.rows.map(numericize),
+      ultimasVentas: await recomponerGananciaRegalos(ultimasVentas.rows.map(numericize)),
       ultimosMovimientos: ultimosMovs.rows.map(numericize)
     });
   } catch (e) {
@@ -296,7 +353,7 @@ app.get("/api/dashboard", async (req, res) => {
       else if (c.moneda === "ARS") saldoARS += s;
     });
     const totalLiquido = saldoUSD + (saldoARS / dolar);
-    const ventas = memStore.ventas || [];
+    const ventas = await recomponerGananciaRegalos(memStore.ventas || []);
     const gananciaMes = ventas.reduce((a, v) => a + (parseFloat(v.ganancia_usd) || 0), 0);
     const totalVendidos = ventas.length;
     const promedio = totalVendidos > 0 ? gananciaMes / totalVendidos : 0;
@@ -329,7 +386,7 @@ app.get("/api/dashboard", async (req, res) => {
       },
       equiposEnStock: (memStore.dispositivos || []).filter(d => d.estado === "En Stock").length,
       reparacionesActivas: (memStore.reparaciones || []).filter(r => r.estado !== "Entregado y Cobrado").length,
-      ultimasVentas: (memStore.ventas || []).slice(-5).reverse(),
+      ultimasVentas: ventas.slice(-5).reverse(),
       ultimosMovimientos: (memStore.caja_movimientos || []).slice(-6).reverse()
     });
   }
@@ -435,11 +492,12 @@ app.get("/api/ventas", async (req, res) => {
     if (r.rows && r.rows.length > 0) {
       const pgIds = new Set(r.rows.map(row => String(row.id)));
       const extra = (memStore.ventas || []).filter(v => !pgIds.has(String(v.id)));
-      return res.json([...r.rows.map(numericize), ...extra]);
+      const merged = await recomponerGananciaRegalos([...r.rows.map(numericize), ...extra]);
+      return res.json(merged);
     }
-    return res.json(memStore.ventas || []);
+    return res.json(await recomponerGananciaRegalos(memStore.ventas || []));
   } catch (e) {
-    res.json(memStore.ventas || []);
+    res.json(await recomponerGananciaRegalos(memStore.ventas || []));
   }
 });
 
@@ -471,6 +529,8 @@ app.post("/api/ventas", async (req, res) => {
     costo_reparacion: costoRep,
     descuentos_regalos_detalle: b.descuentos_regalos_detalle || "",
     descuento_monto: desc,
+    regalo_componentes: b.regalo_componentes || null,
+    regalo_costo_snapshot_usd: parseFloat(b.regalo_costo_snapshot_usd) || 0,
     ganancia_usd: ganUSD,
     ganancia_pesos: ganUSD * dolar,
     comision_vendedor_pesos: comisionPesos,
@@ -572,6 +632,8 @@ app.put("/api/ventas/:id", async (req, res) => {
     costo_reparacion: costoRep,
     descuentos_regalos_detalle: b.descuentos_regalos_detalle ?? old.descuentos_regalos_detalle,
     descuento_monto: desc,
+    regalo_componentes: b.regalo_componentes !== undefined ? b.regalo_componentes : (old.regalo_componentes || null),
+    regalo_costo_snapshot_usd: b.regalo_costo_snapshot_usd !== undefined ? parseFloat(b.regalo_costo_snapshot_usd) || 0 : (parseFloat(old.regalo_costo_snapshot_usd) || 0),
     ganancia_usd: ganUSD,
     ganancia_pesos: ganUSD * dolar,
     comision_vendedor_pesos: comisionPesos,
@@ -625,8 +687,8 @@ app.put("/api/ventas/:id", async (req, res) => {
         }
         // 2) Actualizar la venta en PG (o insertarla si no existía)
         const upd = await q(
-          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, ganancia_usd=$13, ganancia_pesos=$14, comision_vendedor_pesos=$15, comision_vendedor_usd=$16, metodo_pago=$17, caja_destino=$18, observaciones=$19 WHERE id=$20`,
-          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Fuerte Dólares", updated.observaciones || "", parseInt(id)]
+          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, metodo_pago=$19, caja_destino=$20, observaciones=$21 WHERE id=$22`,
+          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Fuerte Dólares", updated.observaciones || "", parseInt(id)]
         );
         if (upd.rowCount === 0) {
           await persistVentaPG(updated, b.impactar_caja);

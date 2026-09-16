@@ -7,13 +7,44 @@ export default function Ventas({ config, onDataChange }) {
   const [dispositivosStock, setDispositivosStock] = useState([]);
   const [vendedores, setVendedores] = useState([]);
   const [cajas, setCajas] = useState([]);
+  const [inventario, setInventario] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [searchDispositivo, setSearchDispositivo] = useState('');
   const [tipoVenta, setTipoVenta] = useState('DISPOSITIVO'); // 'DISPOSITIVO' o 'ACCESORIO_LIBRE'
   const [editandoVenta, setEditandoVenta] = useState(null);
+  const [modoRegalo, setModoRegalo] = useState(null); // label del combo elegido o 'custom'
+  const [combosExtra, setCombosExtra] = useState([]);
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
+
+  const extractKeywords = (label) =>
+    String(label || '').toLowerCase().split(/[+,\/]/).map(s => s.trim()).filter(Boolean);
+
+  const parseCombos = (raw) => {
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.map(c => {
+        const label = typeof c === 'string' ? c : (c.label || '');
+        return { label, keywords: Array.isArray(c.keywords) && c.keywords.length > 0 ? c.keywords : extractKeywords(label) };
+      }).filter(c => c.label);
+    } catch {
+      return [];
+    }
+  };
+
+  useEffect(() => {
+    setCombosExtra(parseCombos(config?.combos_regalos));
+  }, [config?.combos_regalos]);
+
+  // Combos predeterminados + los guardados por el usuario
+  const combosRegalo = [
+    { label: 'Funda + Vidrio', keywords: ['funda', 'vidrio'] },
+    { label: 'Funda + Vidrio + Cargador', keywords: ['funda', 'vidrio', 'cargador'] },
+    ...combosExtra
+  ];
 
   // Form State
   const [formData, setFormData] = useState({
@@ -31,6 +62,8 @@ export default function Ventas({ config, onDataChange }) {
     costo_reparacion: 0,
     descuento_monto: 0,
     descuentos_regalos_detalle: '',
+    regalo_componentes: [],
+    regalo_costo_snapshot_usd: 0,
     comision_vendedor_pesos: 0,
     caja_destino: 'Caja Fuerte Dólares',
     metodo_pago: 'Efectivo USD',
@@ -45,28 +78,32 @@ export default function Ventas({ config, onDataChange }) {
   const fetchVentasData = async () => {
     try {
       setLoading(true);
-      const [resVentas, resDisp, resVend, resCajas] = await Promise.all([
+      const [resVentas, resDisp, resVend, resCajas, resInv] = await Promise.all([
         fetch('/api/ventas').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/dispositivos').then(r => r.ok ? r.json() : null).catch(() => null),
         fetch('/api/vendedores').then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch('/api/cajas').then(r => r.ok ? r.json() : null).catch(() => null)
+        fetch('/api/cajas').then(r => r.ok ? r.json() : null).catch(() => null),
+        fetch('/api/inventario').then(r => r.ok ? r.json() : null).catch(() => null)
       ]);
 
       const v = (resVentas && Array.isArray(resVentas) && resVentas.length > 0) ? resVentas : (fallbackData.ventas || []);
       const d = (resDisp && Array.isArray(resDisp) && resDisp.length > 0) ? resDisp : (fallbackData.dispositivos || []);
       const vend = (resVend && Array.isArray(resVend) && resVend.length > 0) ? resVend : (fallbackData.vendedores || []);
       const c = (resCajas && Array.isArray(resCajas) && resCajas.length > 0) ? resCajas : (fallbackData.cuentas_caja || []);
+      const inv = (resInv && Array.isArray(resInv) && resInv.length > 0) ? resInv : (fallbackData.inventario_items || []);
 
       setVentas(v);
       setDispositivosStock(d.filter(item => item.estado === 'En Stock' || item.estado === 'Señado'));
       setVendedores(vend);
       setCajas(c);
+      setInventario(inv);
     } catch (err) {
       console.error("Error fetching data:", err);
       setVentas(fallbackData.ventas || []);
       setDispositivosStock((fallbackData.dispositivos || []).filter(item => item.estado === 'En Stock' || item.estado === 'Señado'));
       setVendedores(fallbackData.vendedores || []);
       setCajas(fallbackData.cuentas_caja || []);
+      setInventario(fallbackData.inventario_items || []);
     } finally {
       setLoading(false);
     }
@@ -106,6 +143,15 @@ export default function Ventas({ config, onDataChange }) {
     setTipoVenta('ACCESORIO_LIBRE');
     setEditandoVenta(v);
     setSearchDispositivo('');
+    const componentes = (() => {
+      try {
+        const p = JSON.parse(v.regalo_componentes || '[]');
+        return Array.isArray(p) ? p : [];
+      } catch { return []; }
+    })();
+    const snapshotAcc = parseFloat(v.regalo_costo_snapshot_usd) || 0;
+    const label = v.descuentos_regalos_detalle || '';
+    setModoRegalo(label || 'custom');
     setFormData({
       dispositivo_id: v.dispositivo_id || '',
       dispositivo_seleccionado: null,
@@ -119,15 +165,52 @@ export default function Ventas({ config, onDataChange }) {
       cotizacion_dolar: parseFloat(v.cotizacion_dolar) || dolarCotiz,
       costo_total_usd: v.costo_total_usd || 0,
       costo_reparacion: v.costo_reparacion || 0,
-      descuento_monto: v.descuento_monto || 0,
-      descuentos_regalos_detalle: v.descuentos_regalos_detalle || '',
+      descuento_monto: (parseFloat(v.descuento_monto) || 0) - snapshotAcc,
+      descuentos_regalos_detalle: label,
+      regalo_componentes: componentes,
+      regalo_costo_snapshot_usd: snapshotAcc,
       comision_vendedor_pesos: v.comision_vendedor_pesos || 0,
       caja_destino: v.caja_destino || 'Caja Fuerte Dólares',
       metodo_pago: v.metodo_pago || 'Efectivo USD',
       impactar_caja: true,
       observaciones: v.observaciones || ''
     });
-    setShowModal(true);
+setShowModal(true);
+  };
+
+  const seleccionarCombo = (combo) => {
+    setModoRegalo(combo.label);
+    setFormData(f => ({
+      ...f,
+      regalo_componentes: combo.keywords || extractKeywords(combo.label),
+      regalo_costo_snapshot_usd: 0,
+      descuentos_regalos_detalle: combo.label
+    }));
+  };
+
+  const guardarCombo = async () => {
+    const label = (formData.descuentos_regalos_detalle || '').trim();
+    if (!label) return;
+    if (combosRegalo.some(c => c.label === label)) {
+      alert('Esa opción ya existe entre los accesorios bonificados.');
+      seleccionarCombo({ label, keywords: extractKeywords(label) });
+      return;
+    }
+    const nuevo = { label, keywords: extractKeywords(label) };
+    const proximos = [...combosExtra, nuevo];
+    setCombosExtra(proximos);
+    setModoRegalo(label);
+    setFormData(f => ({ ...f, regalo_componentes: nuevo.keywords }));
+    try {
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ combos_regalos: JSON.stringify(proximos.map(c => ({ label: c.label }))) })
+      });
+      if (onDataChange) onDataChange();
+    } catch (err) {
+      console.error("Error guardando combo de regalos:", err);
+    }
   };
 
   // Cálculos en vivo
@@ -136,8 +219,22 @@ export default function Ventas({ config, onDataChange }) {
   const pPesos = parseFloat(formData.precio_venta_pesos) || (pUSD * cotizActual) || 0;
   const cUSD = parseFloat(formData.costo_total_usd) || 0;
   const cRep = parseFloat(formData.costo_reparacion) || 0;
-  const desc = parseFloat(formData.descuento_monto) || 0;
-  
+  const regaloKeywords = Array.isArray(formData.regalo_componentes) ? formData.regalo_componentes : [];
+
+  // Costo ACTUAL de los accesorios bonificados, tomado del stock de "Accesorios y Repuestos".
+  // Si ese stock se recalibra, el monto a descontar se actualiza solo.
+  const costoAccesoriosUSD = regaloKeywords.reduce((sum, kw) => {
+    const match = inventario
+      .filter(i => (parseInt(i.stock_actual) || 0) > 0 && i.nombre && i.nombre.toLowerCase().includes(String(kw).toLowerCase()))
+      .sort((a, b) => (parseFloat(a.costo_usd) || 0) - (parseFloat(b.costo_usd) || 0))[0];
+    if (!match) return sum;
+    let c = parseFloat(match.costo_usd) || 0;
+    if (!c) c = (parseFloat(match.costo_pesos) || 0) / cotizActual;
+    return sum + c;
+  }, 0);
+  const descManual = parseFloat(formData.descuento_monto) || 0;
+  const desc = descManual + costoAccesoriosUSD;
+
   // Ganancia Neta
   const gananciaNetaUSD = pUSD - cUSD - cRep - desc;
   const gananciaNetaPesos = gananciaNetaUSD * cotizActual;
@@ -149,6 +246,9 @@ export default function Ventas({ config, onDataChange }) {
         ...formData,
         precio_venta_usd: pUSD,
         precio_venta_pesos: pPesos,
+        descuento_monto: desc,
+        regalo_componentes: JSON.stringify(regaloKeywords),
+        regalo_costo_snapshot_usd: costoAccesoriosUSD,
         ganancia_usd: gananciaNetaUSD,
         ganancia_pesos: gananciaNetaPesos
       };
@@ -165,6 +265,7 @@ export default function Ventas({ config, onDataChange }) {
         }
         setShowModal(false);
         setEditandoVenta(null);
+        setModoRegalo(null);
         // Reset form
         setFormData({
           dispositivo_id: '',
@@ -181,6 +282,8 @@ export default function Ventas({ config, onDataChange }) {
           costo_reparacion: 0,
           descuento_monto: 0,
           descuentos_regalos_detalle: '',
+          regalo_componentes: [],
+          regalo_costo_snapshot_usd: 0,
           comision_vendedor_pesos: 0,
           caja_destino: 'Caja Fuerte Dólares',
           metodo_pago: 'Efectivo USD',
@@ -224,6 +327,7 @@ export default function Ventas({ config, onDataChange }) {
           onClick={() => {
             setSearchDispositivo('');
             setEditandoVenta(null);
+            setModoRegalo(null);
             setShowModal(true);
           }}
           className="bg-sky-600 hover:bg-sky-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-sky-600/30 transition-all flex items-center gap-2 text-sm justify-center"
@@ -278,7 +382,7 @@ export default function Ventas({ config, onDataChange }) {
                       </div>
                       {v.descuentos_regalos_detalle && (
                         <div className="text-xs text-amber-400/90 font-normal mt-0.5">
-                          🎁 {v.descuentos_regalos_detalle} (-${v.descuento_monto} USD)
+                          🎁 {v.descuentos_regalos_detalle} (-${(v.descuento_efectivo_usd ?? v.descuento_monto)} USD)
                         </div>
                       )}
                     </td>
@@ -628,18 +732,78 @@ export default function Ventas({ config, onDataChange }) {
 
                 {/* Descuentos o Bonificaciones */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
+                  <div className="space-y-2">
                     <label className="block text-xs text-slate-400 mb-1">Accesorios Bonificados / Regalos</label>
-                    <input
-                      type="text"
-                      value={formData.descuentos_regalos_detalle}
-                      onChange={e => setFormData({ ...formData, descuentos_regalos_detalle: e.target.value })}
-                      placeholder="ej. Templado + Funda Silicona"
-                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                    />
+                    <div className="flex flex-wrap gap-1.5">
+                      {combosRegalo.map(c => (
+                        <button
+                          key={c.label}
+                          type="button"
+                          onClick={() => seleccionarCombo(c)}
+                          className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition border ${
+                            modoRegalo === c.label
+                              ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-emerald-500/40'
+                          }`}
+                        >
+                          {c.label}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => setModoRegalo('custom')}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition border ${
+                          modoRegalo === 'custom'
+                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                            : 'bg-slate-800 text-slate-300 border-slate-700 hover:border-emerald-500/40'
+                        }`}
+                      >
+                        ✏️ Escribir otro...
+                      </button>
+                    </div>
+
+                    {modoRegalo === 'custom' || (modoRegalo && !combosRegalo.some(c => c.label === modoRegalo)) ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={formData.descuentos_regalos_detalle}
+                          onChange={e => {
+                            setFormData({
+                              ...formData,
+                              descuentos_regalos_detalle: e.target.value,
+                              regalo_componentes: extractKeywords(e.target.value)
+                            });
+                            setModoRegalo('custom');
+                          }}
+                          placeholder="ej. Auricular + Vidrio"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={guardarCombo}
+                          className="shrink-0 px-3 py-2 rounded-xl text-xs font-medium bg-slate-700 hover:bg-emerald-600 text-white transition"
+                          title="Guardar como opción permanente"
+                        >
+                          Guardar
+                        </button>
+                      </div>
+                    ) : null}
+
+                    {formData.descuentos_regalos_detalle ? (
+                      costoAccesoriosUSD > 0 ? (
+                        <div className="text-xs text-emerald-300">
+                          Costo de regalos descontado del stock:{' '}
+                          <span className="font-bold text-emerald-400">-${costoAccesoriosUSD.toFixed(2)} USD</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-500">
+                          No se encontró el costo en "Accesorios y Repuestos" (sin stock cargado o sin costo). Se descuenta $0.
+                        </div>
+                      )
+                    ) : null}
                   </div>
                   <div>
-                    <label className="block text-xs text-slate-400 mb-1">Valor Descuento / Regalo (USD)</label>
+                    <label className="block text-xs text-slate-400 mb-1">Descuento Extra (USD)</label>
                     <input
                       type="number"
                       step="any"

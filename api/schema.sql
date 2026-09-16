@@ -73,6 +73,8 @@ CREATE TABLE IF NOT EXISTS ventas (
   costo_reparacion NUMERIC(12,2) DEFAULT 0,
   descuentos_regalos_detalle TEXT,
   descuento_monto NUMERIC(12,2) DEFAULT 0,
+  regalo_componentes TEXT, -- JSON array de keywords de accesorios bonificados (ej: ["funda","vidrio"]) para recalcular el descuento desde el stock actual
+  regalo_costo_snapshot_usd NUMERIC(12,2) DEFAULT 0, -- costo al momento de vender; el GET recalcula contra el inventario actual
   ganancia_usd NUMERIC(12,2) DEFAULT 0,
   ganancia_pesos NUMERIC(14,2) DEFAULT 0,
   comision_vendedor_pesos NUMERIC(12,2) DEFAULT 0,
