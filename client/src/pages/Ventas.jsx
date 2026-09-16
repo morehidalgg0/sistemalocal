@@ -1,5 +1,5 @@
 import fallbackData from "../data/fallbackData";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil } from 'lucide-react';
 
 export default function Ventas({ config, onDataChange }) {
@@ -14,6 +14,7 @@ export default function Ventas({ config, onDataChange }) {
   const [tipoVenta, setTipoVenta] = useState('DISPOSITIVO'); // 'DISPOSITIVO' o 'ACCESORIO_LIBRE'
   const [editandoVenta, setEditandoVenta] = useState(null);
   const [modoRegalo, setModoRegalo] = useState(null); // label del combo elegido o 'custom'
+  const regaloInputRef = useRef(null);
   const [combosExtra, setCombosExtra] = useState([]);
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
@@ -751,7 +752,7 @@ setShowModal(true);
                       ))}
                       <button
                         type="button"
-                        onClick={() => setModoRegalo('custom')}
+                        onClick={() => regaloInputRef.current?.focus()}
                         className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition border ${
                           modoRegalo === 'custom'
                             ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
@@ -762,32 +763,35 @@ setShowModal(true);
                       </button>
                     </div>
 
-                    {modoRegalo === 'custom' || (modoRegalo && !combosRegalo.some(c => c.label === modoRegalo)) ? (
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={formData.descuentos_regalos_detalle}
-                          onChange={e => {
-                            setFormData({
-                              ...formData,
-                              descuentos_regalos_detalle: e.target.value,
-                              regalo_componentes: extractKeywords(e.target.value)
-                            });
-                            setModoRegalo('custom');
-                          }}
-                          placeholder="ej. Auricular + Vidrio"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                        />
-                        <button
-                          type="button"
-                          onClick={guardarCombo}
-                          className="shrink-0 px-3 py-2 rounded-xl text-xs font-medium bg-slate-700 hover:bg-emerald-600 text-white transition"
-                          title="Guardar como opción permanente"
-                        >
-                          Guardar
-                        </button>
-                      </div>
-                    ) : null}
+                    <div className="flex gap-2">
+                      <input
+                        ref={regaloInputRef}
+                        type="text"
+                        value={formData.descuentos_regalos_detalle}
+                        onChange={e => {
+                          const txt = e.target.value;
+                          setFormData(f => ({
+                            ...f,
+                            descuentos_regalos_detalle: txt,
+                            regalo_componentes: extractKeywords(txt)
+                          }));
+                          setModoRegalo(txt ? 'custom' : null);
+                        }}
+                        placeholder="ej. Auricular + Vidrio"
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') { e.preventDefault(); guardarCombo(); }
+                        }}
+                        className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={guardarCombo}
+                        className="shrink-0 px-3 py-2 rounded-xl text-xs font-medium bg-slate-700 hover:bg-emerald-600 text-white transition"
+                        title="Guardar como opción permanente"
+                      >
+                        Guardar
+                      </button>
+                    </div>
 
                     {formData.descuentos_regalos_detalle ? (
                       costoAccesoriosUSD > 0 ? (
