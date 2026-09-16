@@ -932,6 +932,110 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
   res.json({ success: true, movimiento: newMov, entidad_actualizada: e });
 });
 
+app.post("/api/cuentas-corrientes", async (req, res) => {
+  const b = req.body;
+  const nueva = {
+    id: Date.now(),
+    nombre: b.nombre,
+    tipo: b.tipo || "PROVEEDOR",
+    contacto: b.contacto || "",
+    moneda_principal: b.moneda_principal || "USD",
+    saldo_adeudado: parseFloat(b.saldo_inicial) || 0,
+    notas: b.notas || "",
+    created_at: new Date().toISOString()
+  };
+  memStore.entidades_cc = [nueva, ...(memStore.entidades_cc || [])];
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("INSERT INTO entidades_cc (nombre, tipo, contacto, moneda_principal, saldo_adeudado, notas) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id",
+          [nueva.nombre, nueva.tipo, nueva.contacto || "", nueva.moneda_principal, nueva.saldo_adeudado, nueva.notas || ""]);
+        if (r.rows && r.rows[0]) nueva.id = r.rows[0].id;
+      } catch (err) {
+        console.warn("PG insert entidad CC:", err.message);
+      }
+    }
+  }
+  res.json({ success: true, entidad: nueva });
+});
+
+app.put("/api/cuentas-corrientes/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const b = req.body;
+
+  // Fuente de verdad: Postgres primero (misma estrategia que ventas)
+  let ent = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM entidades_cc WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) ent = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("PUT cuentas-corrientes -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!ent) {
+    const idx = (memStore.entidades_cc || []).findIndex(e => e.id === id);
+    if (idx !== -1) ent = memStore.entidades_cc[idx];
+  }
+  if (!ent) return res.status(404).json({ error: "Cuenta corriente no encontrada" });
+
+  const updated = {
+    ...ent,
+    nombre: b.nombre ?? ent.nombre,
+    tipo: b.tipo ?? ent.tipo,
+    contacto: b.contacto !== undefined ? b.contacto : (ent.contacto || ""),
+    moneda_principal: b.moneda_principal ?? ent.moneda_principal,
+    saldo_adeudado: b.saldo_adeudado !== undefined ? (parseFloat(b.saldo_adeudado) || 0) : ent.saldo_adeudado,
+    notas: b.notas !== undefined ? b.notas : (ent.notas || ""),
+    updated_at: new Date().toISOString()
+  };
+
+  const memIdx = (memStore.entidades_cc || []).findIndex(e => e.id === id);
+  if (memIdx !== -1) memStore.entidades_cc[memIdx] = updated;
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        await q("UPDATE entidades_cc SET nombre=$1, tipo=$2, contacto=$3, moneda_principal=$4, saldo_adeudado=$5, notas=$6 WHERE id=$7",
+          [updated.nombre, updated.tipo, updated.contacto || "", updated.moneda_principal, updated.saldo_adeudado, updated.notas || "", id]).catch(() => {});
+      } catch (e) {
+        console.warn("PUT cuentas-corrientes -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, entidad: updated });
+});
+
+app.delete("/api/cuentas-corrientes/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  let found = false;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("DELETE FROM entidades_cc WHERE id=$1 RETURNING id", [id]);
+        found = (r.rowCount || 0) > 0;
+      } catch (e) {
+        console.warn("DELETE cuentas-corrientes -> PG error:", e.message);
+      }
+    }
+  }
+  const memIdx = (memStore.entidades_cc || []).findIndex(e => e.id === id);
+  if (memIdx !== -1) {
+    memStore.entidades_cc.splice(memIdx, 1);
+    memStore.movimientos_cc = (memStore.movimientos_cc || []).filter(m => m.entidad_id !== id);
+    found = true;
+  }
+  if (!found) return res.status(404).json({ error: "Cuenta corriente no encontrada" });
+  res.json({ success: true, id });
+});
+
 app.get("/api/inventario", async (req, res) => {
   try {
     const r = await q("SELECT * FROM inventario_items ORDER BY id");

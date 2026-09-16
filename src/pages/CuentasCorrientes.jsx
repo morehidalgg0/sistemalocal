@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign } from 'lucide-react';
+import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2 } from 'lucide-react';
 
 export default function CuentasCorrientes({ config, onDataChange }) {
   const [entidades, setEntidades] = useState([]);
@@ -8,7 +8,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
   const [movimientos, setMovimientos] = useState([]);
   const [cajas, setCajas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showNuevaEntidadModal, setShowNuevaEntidadModal] = useState(false);
+  const [showEntidadModal, setShowEntidadModal] = useState(false);
+  const [editandoEntidad, setEditandoEntidad] = useState(null);
   const [showMovModal, setShowMovModal] = useState(false);
 
   // Form Movimiento CC
@@ -64,21 +65,75 @@ export default function CuentasCorrientes({ config, onDataChange }) {
     }
   };
 
-  const handleCreateEntidad = async (e) => {
+  const openNuevaEntidad = () => {
+    setEditandoEntidad(null);
+    setEntidadForm({ nombre: '', tipo: 'PROVEEDOR', contacto: '', moneda_principal: 'USD', saldo_inicial: '0', notas: '' });
+    setShowEntidadModal(true);
+  };
+
+  const openEditEntidad = (ent) => {
+    setEditandoEntidad(ent);
+    setEntidadForm({
+      nombre: ent.nombre,
+      tipo: ent.tipo || 'PROVEEDOR',
+      contacto: ent.contacto || '',
+      moneda_principal: ent.moneda_principal || 'USD',
+      saldo_inicial: String(ent.saldo_adeudado ?? 0),
+      notas: ent.notas || ''
+    });
+    setShowEntidadModal(true);
+  };
+
+  const handleSaveEntidad = async (e) => {
     e.preventDefault();
+    const isEdit = !!editandoEntidad;
     try {
-      const res = await fetch('/api/cuentas-corrientes', {
-        method: 'POST',
+      const payload = {
+        ...entidadForm,
+        ...(isEdit ? { saldo_adeudado: entidadForm.saldo_inicial } : {})
+      };
+      const res = await fetch(isEdit ? `/api/cuentas-corrientes/${editandoEntidad.id}` : '/api/cuentas-corrientes', {
+        method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(entidadForm)
+        body: JSON.stringify(payload)
       });
       if (res.ok) {
-        setShowNuevaEntidadModal(false);
-        fetchEntidades();
+        const saved = await res.json().catch(() => null);
+        setShowEntidadModal(false);
+        setEditandoEntidad(null);
+        if (saved && saved.entidad) {
+          setSelectedEntidad(saved.entidad);
+          selectEntidad(saved.entidad);
+        } else {
+          fetchEntidades();
+        }
         if (onDataChange) onDataChange();
       }
     } catch (err) {
-      console.error("Error creando entidad CC:", err);
+      console.error("Error guardando entidad CC:", err);
+    }
+  };
+
+  const handleDeleteEntidad = async () => {
+    if (!editandoEntidad) return;
+    const ok = window.confirm(`¿Eliminar la cuenta "${editandoEntidad.nombre}"?\n\nSe borran para siempre la cuenta y todos sus movimientos. Esta acción no se puede deshacer.`);
+    if (!ok) return;
+    const id = editandoEntidad.id;
+    try {
+      const res = await fetch(`/api/cuentas-corrientes/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setShowEntidadModal(false);
+        setEditandoEntidad(null);
+        if (selectedEntidad?.id === id) setSelectedEntidad(null);
+        fetchEntidades();
+        if (onDataChange) onDataChange();
+        alert('Cuenta eliminada.');
+      } else {
+        alert('No se pudo eliminar la cuenta.');
+      }
+    } catch (err) {
+      console.error("Error eliminando entidad CC:", err);
+      alert('No se pudo eliminar la cuenta.');
     }
   };
 
@@ -117,7 +172,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
           </p>
         </div>
         <button
-          onClick={() => setShowNuevaEntidadModal(true)}
+          onClick={openNuevaEntidad}
           className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-2 text-sm justify-center"
         >
           <Plus className="w-4 h-4" />
@@ -194,6 +249,15 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                       ${parseFloat(selectedEntidad.saldo_adeudado || 0).toLocaleString('es-AR')} {selectedEntidad.moneda_principal}
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => openEditEntidad(selectedEntidad)}
+                    className="bg-slate-800 hover:bg-slate-700 text-white font-medium px-4 py-2.5 rounded-xl border border-slate-700 transition flex items-center gap-2 text-sm"
+                    title="Editar cuenta"
+                  >
+                    <Pencil className="w-4 h-4" />
+                    Editar cuenta
+                  </button>
 
                   <button
                     onClick={() => setShowMovModal(true)}
@@ -351,15 +415,15 @@ export default function CuentasCorrientes({ config, onDataChange }) {
       )}
 
       {/* Modal Nueva Entidad CC */}
-      {showNuevaEntidadModal && (
+      {showEntidadModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-lg font-bold text-white">Nueva Cuenta Corriente</h3>
-              <button onClick={() => setShowNuevaEntidadModal(false)} className="text-slate-400 hover:text-white">✕</button>
+              <h3 className="text-lg font-bold text-white">{editandoEntidad ? 'Editar Cuenta Corriente' : 'Nueva Cuenta Corriente'}</h3>
+              <button onClick={() => setShowEntidadModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            <form onSubmit={handleCreateEntidad} className="space-y-4">
+            <form onSubmit={handleSaveEntidad} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Nombre *</label>
                 <input
@@ -401,7 +465,9 @@ export default function CuentasCorrientes({ config, onDataChange }) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Saldo Inicial Adeudado</label>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                {editandoEntidad ? 'Saldo Adeudado Actual' : 'Saldo Inicial Adeudado'}
+              </label>
                 <input
                   type="number"
                   step="any"
@@ -422,11 +488,23 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                 ></textarea>
               </div>
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setShowNuevaEntidadModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
-                <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm">
-                  Crear Cuenta
-                </button>
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                {editandoEntidad ? (
+                  <button
+                    type="button"
+                    onClick={handleDeleteEntidad}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-rose-400 bg-rose-500/10 border border-rose-500/30 hover:bg-rose-500/20 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Eliminar cuenta
+                  </button>
+                ) : <span />}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setShowEntidadModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
+                  <button type="submit" className="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-5 py-2 rounded-xl text-sm">
+                    {editandoEntidad ? 'Guardar Cambios' : 'Crear Cuenta'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
