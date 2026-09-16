@@ -2,9 +2,10 @@ import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Smartphone, Plus, Search, Filter, Battery, ShieldAlert, CheckCircle, Tag, Edit2, Trash2 } from 'lucide-react';
 
+const ORIGENES_FIJOS = ['Lucas Moroni', 'Victor Diaz', 'Garden', 'Stock'];
+
 export default function Dispositivos({ config, onDataChange }) {
   const [dispositivos, setDispositivos] = useState([]);
-  const [proveedores, setProveedores] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterEstado, setFilterEstado] = useState('ALL');
@@ -38,12 +39,8 @@ export default function Dispositivos({ config, onDataChange }) {
   const fetchDispositivos = async () => {
     try {
       setLoading(true);
-      const [resDisp, resCC] = await Promise.all([
-        fetch('/api/dispositivos').then(r => r.json()),
-        fetch('/api/cuentas-corrientes').then(r => r.json())
-      ]);
+      const resDisp = await fetch('/api/dispositivos').then(r => r.json());
       setDispositivos(resDisp || []);
-      setProveedores((resCC || []).filter(e => e.tipo === 'PROVEEDOR' || e.tipo === 'SOCIO'));
     } catch (err) {
       console.error("Error al cargar dispositivos:", err);
     } finally {
@@ -423,15 +420,37 @@ export default function Dispositivos({ config, onDataChange }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Proveedor / Origen</label>
-                  <select
-                    value={formData.proveedor}
-                    onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
-                  >
-                    {proveedores.map(p => (
-                      <option key={p.id} value={p.nombre}>{p.nombre}</option>
-                    ))}
-                  </select>
+                  {ORIGENES_FIJOS.includes(formData.proveedor) ? (
+                    <select
+                      value={formData.proveedor}
+                      onChange={e => {
+                        const v = e.target.value;
+                        setFormData({ ...formData, proveedor: v === '__manual__' ? '' : v });
+                      }}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                    >
+                      {ORIGENES_FIJOS.map(p => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                      <option value="__manual__">✏️ Escribir otro...</option>
+                    </select>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        value={formData.proveedor}
+                        onChange={e => setFormData({ ...formData, proveedor: e.target.value })}
+                        placeholder="Escribir proveedor / origen..."
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, proveedor: 'Garden' })}
+                        className="shrink-0 px-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-xs text-slate-200 transition-colors"
+                      >
+                        Volver
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div>
