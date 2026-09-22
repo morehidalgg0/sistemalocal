@@ -9,6 +9,8 @@ export default function Cajas({ config, onDataChange }) {
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
   const [cajaSeleccionada, setCajaSeleccionada] = useState(null); // caja activa para filtrar movimientos
+  const [ordenMov, setOrdenMov] = useState('fecha_asc');
+  const [filtroTipo, setFiltroTipo] = useState('TODOS');
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
 
@@ -120,9 +122,19 @@ export default function Cajas({ config, onDataChange }) {
     }
   };
 
-  const movimientosFiltrados = cajaSeleccionada
-    ? movimientos.filter(m => m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre)
-    : movimientos;
+  const movimientosFiltrados = movimientos
+    .filter(m => !cajaSeleccionada ? true : (m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre))
+    .filter(m => filtroTipo === 'TODOS' || m.tipo_movimiento === filtroTipo)
+    .sort((a, b) => {
+      if (ordenMov === 'monto') return (parseFloat(b.monto) || 0) - (parseFloat(a.monto) || 0);
+      if (ordenMov === 'caja') {
+        const c = String(a.cuenta_nombre || '').localeCompare(String(b.cuenta_nombre || ''));
+        if (c) return c;
+        return new Date(a.fecha) - new Date(b.fecha);
+      }
+      const d = new Date(a.fecha) - new Date(b.fecha);
+      return ordenMov === 'fecha_desc' ? -d : (d || a.id - b.id);
+    });
 
   return (
     <div className="space-y-6">
@@ -229,6 +241,41 @@ export default function Cajas({ config, onDataChange }) {
           ) : (
             <span className="text-xs text-slate-400 font-mono">Últimos registros</span>
           )}
+        </div>
+
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+          <select
+            value={cajaSeleccionada?.id ?? ''}
+            onChange={e => {
+              const id = e.target.value ? parseInt(e.target.value) : null;
+              setCajaSeleccionada(id ? cajas.find(c => c.id === id) || null : null);
+            }}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          >
+            <option value="">Todas las cajas</option>
+            {cajas.map(c => (
+              <option key={c.id} value={c.id}>{c.nombre}</option>
+            ))}
+          </select>
+          <select
+            value={filtroTipo}
+            onChange={e => setFiltroTipo(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          >
+            <option value="TODOS">Entradas y salidas</option>
+            <option value="ENTRADA">Solo entradas</option>
+            <option value="SALIDA">Solo salidas</option>
+          </select>
+          <select
+            value={ordenMov}
+            onChange={e => setOrdenMov(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          >
+            <option value="fecha_asc">Orden: fecha ↑</option>
+            <option value="fecha_desc">Orden: fecha ↓</option>
+            <option value="caja">Orden: caja</option>
+            <option value="monto">Orden: monto</option>
+          </select>
         </div>
 
         {loading ? (
