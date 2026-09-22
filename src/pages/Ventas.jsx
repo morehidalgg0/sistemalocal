@@ -78,6 +78,9 @@ export default function Ventas({ config, onDataChange }) {
     observaciones: ''
   });
 
+  // Abono desdoblado: [{caja, monto, moneda}]. Si queda vacío, la venta cae a caja_destino simple.
+  const [pagos, setPagos] = useState([]);
+
   useEffect(() => {
     fetchVentasData();
   }, []);
@@ -160,6 +163,18 @@ export default function Ventas({ config, onDataChange }) {
     setTipoVenta('ACCESORIO_LIBRE');
     setEditandoVenta(v);
     setSearchDispositivo('');
+    // Cargar el desglose de abono si la venta lo tenía
+    let desglose = [];
+    try {
+      const p = typeof v.desglose_pago === 'string' ? JSON.parse(v.desglose_pago || '[]') : (v.desglose_pago || []);
+      desglose = Array.isArray(p) ? p.filter(x => x.caja && parseFloat(x.monto) > 0) : [];
+    } catch { desglose = []; }
+    if (desglose.length === 0) {
+      const moneda = /pesos/i.test(v.caja_destino || '') ? 'ARS' : 'USD';
+      const monto = moneda === 'ARS' ? (parseFloat(v.precio_venta_pesos) || 0) : (parseFloat(v.precio_venta_usd) || 0);
+      if (monto > 0) desglose = [{ caja: v.caja_destino || 'Caja Dólares', monto, moneda }];
+    }
+    setPagos(desglose);
     const componentes = (() => {
       try {
         const p = JSON.parse(v.regalo_componentes || '[]');
@@ -283,7 +298,12 @@ setShowModal(true);
         regalo_componentes: JSON.stringify(regaloKeywords),
         regalo_costo_snapshot_usd: costoAccesoriosUSD,
         ganancia_usd: gananciaNetaUSD,
-        ganancia_pesos: gananciaNetaPesos
+        ganancia_pesos: gananciaNetaPesos,
+        desglose_pago: pagos.length
+          ? pagos
+              .filter(p => p.caja && parseFloat(p.monto) > 0)
+              .map(p => ({ caja: p.caja, monto: parseFloat(p.monto), moneda: p.moneda || (/pesos/i.test(p.caja) ? 'ARS' : 'USD') }))
+          : null
       };
 
       const res = await fetch(editandoVenta ? `/api/ventas/${editandoVenta.id}` : '/api/ventas', {
@@ -299,6 +319,7 @@ setShowModal(true);
         setShowModal(false);
         setEditandoVenta(null);
         setModoRegalo(null);
+        setPagos([]);
         // Reset form
         setFormData({
           dispositivo_id: '',
@@ -370,6 +391,7 @@ setShowModal(true);
             setSearchDispositivo('');
             setEditandoVenta(null);
             setModoRegalo(null);
+            setPagos([]);
             setShowModal(true);
           }}
           className="bg-sky-600 hover:bg-sky-500 text-white font-medium px-4 py-2.5 rounded-xl shadow-lg shadow-sky-600/30 transition-all flex items-center gap-2 text-sm justify-center"
@@ -472,7 +494,17 @@ setShowModal(true);
                       </span>
                     </td>
                     <td className="py-3 px-4 text-xs text-slate-400">
-                      {v.caja_destino}
+                      {(() => {
+                        let legs = [];
+                        try { legs = typeof v.desglose_pago === 'string' ? JSON.parse(v.desglose_pago || '[]') : (v.desglose_pago || []); } catch { legs = []; }
+                        if (!Array.isArray(legs) || legs.length === 0) return <span>{v.caja_destino}</span>;
+                        return legs.map((l, i) => (
+                          <div key={i} className="whitespace-nowrap">
+                            <span className="text-slate-300 font-semibold">{Number(l.monto).toLocaleString('es-AR')} {l.moneda || 'USD'}</span>
+                            <span className="text-slate-500"> → {l.caja}</span>
+                          </div>
+                        ));
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -901,23 +933,89 @@ setShowModal(true);
                 </div>
               </div>
 
-              {/* Caja Destino & Comisión */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
+              {/* Abono (cómo se paga) & Comisión */}
+              <div>
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Caja Destino (Ingreso del Dinero)
+                    ¿Cómo se abona? (una caja por pago)
                   </label>
-                  <select
-                    value={formData.caja_destino}
-                    onChange={e => setFormData({ ...formData, caja_destino: e.target.value })}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white focus:border-sky-500"
-                  >
-                    {cajas.map(c => (
-                      <option key={c.id} value={c.nombre}>{c.nombre} ({c.moneda})</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPagos([
+                        { caja: 'Caja Dólares', monto: pUSD || 0, moneda: 'USD' },
+                        { caja: 'Caja Pesos', monto: pPesos || 0, moneda: 'ARS' }
+                      ])}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-sky-500 hover:text-white transition"
+                      title="Carga el total dividido en USD (Caja Dólares) y pesos (Caja Pesos), editable"
+                    >
+                      Auto: USD + Pesos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const libres = cajas.filter(cn => !pagos.some(p => p.caja === cn.nombre));
+                        const nueva = libres[0] || cajas[0];
+                        if (!nueva) return;
+                        setPagos(p => [...p, { caja: nueva.nombre, monto: 0, moneda: nueva.moneda }]);
+                      }}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-white transition"
+                      title="Agregar otra forma de pago (otra caja)"
+                    >
+                      + Agregar caja
+                    </button>
+                  </div>
                 </div>
 
+                {pagos.length === 0 ? (
+                  <div className="text-[11px] text-slate-500 border border-dashed border-slate-700 rounded-xl px-3 py-2">
+                    Sin pagos definidos. Se registra todo en <b className="text-slate-300">Caja Dólares</b> (USD). Usá "Auto" si la venta se abona en USD y pesos.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {pagos.map((p, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <select
+                          value={p.caja}
+                          onChange={e => {
+                            const cn = cajas.find(c => c.nombre === e.target.value);
+                            setPagos(prev => prev.map((x, idx) => idx === i ? { ...x, caja: e.target.value, moneda: cn ? cn.moneda : x.moneda } : x));
+                          }}
+                          className="flex-1 min-w-0 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-sky-500"
+                        >
+                          {cajas.map(c => (
+                            <option key={c.id} value={c.nombre}>{c.nombre} ({c.moneda})</option>
+                          ))}
+                        </select>
+                        <div className="relative flex-1 min-w-0">
+                          <input
+                            type="number"
+                            step="any"
+                            value={p.monto}
+                            onChange={e => setPagos(prev => prev.map((x, idx) => idx === i ? { ...x, monto: e.target.value } : x))}
+                            placeholder="0"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono focus:border-sky-500"
+                          />
+                          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 font-sans">{p.moneda}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setPagos(prev => prev.filter((_, idx) => idx !== i))}
+                          title="Quitar este pago"
+                          className="p-2 rounded-lg border border-slate-700 text-slate-400 hover:text-rose-400 hover:border-rose-500/50 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <div className="text-[11px] text-slate-500">
+                      Cada forma de pago entra a su caja y el movimiento queda enlazado a la venta con el detalle de abono.
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
                     Comisión del Vendedor ($ ARS)

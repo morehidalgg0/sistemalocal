@@ -131,7 +131,7 @@ async function recomponerGananciaRegalos(rows) {
 // Reasigna venta.id al id serial real si la fila se inserta ahora.
 async function persistVentaPG(venta, impactarCaja) {
   if (!isPostgresAvailable) return;
-  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, regalo_componentes, regalo_costo_snapshot_usd, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, observaciones";
+  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, regalo_componentes, regalo_costo_snapshot_usd, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, desglose_pago, observaciones";
   const v = [
     venta.fecha, venta.dispositivo_id, venta.item_detalle || "", venta.cliente_nombre || "", venta.cliente_contacto || "",
     venta.vendedor_nombre || "NP", venta.precio_venta_usd, venta.precio_venta_pesos, venta.cotizacion_dolar,
@@ -139,6 +139,7 @@ async function persistVentaPG(venta, impactarCaja) {
     venta.descuento_monto, venta.regalo_componentes || null, venta.regalo_costo_snapshot_usd || 0,
     venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
     venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Dólares",
+    venta.desglose_pago || null,
     venta.observaciones || ""
   ];
   const placeholders = v.map((_, i) => "$" + (i + 1)).join(", ");
@@ -150,17 +151,107 @@ async function persistVentaPG(venta, impactarCaja) {
   }
 
   if (impactarCaja !== false) {
-    const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [venta.caja_destino || "Caja Dólares"]).catch(() => null);
-    if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
-      const cRow = cajaPG.rows[0];
-      const monto = cRow.moneda === "ARS" ? venta.precio_venta_pesos : venta.precio_venta_usd;
-      await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [monto, cRow.id]);
-      await q(
-        `INSERT INTO caja_movimientos (fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-        [venta.fecha, cRow.id, cRow.nombre, "ENTRADA", "Venta", "Venta: " + (venta.item_detalle || ""), monto, cRow.moneda, venta.cotizacion_dolar, venta.vendedor_nombre || "NP", "VENTA-#" + venta.id]
-      );
-    }
+    await aplicarDesglosePG(venta, legsDeVenta(venta), `VENTA-#${venta.id}`);
   }
+}
+
+// Normaliza las patas del abono de una venta: [{caja, monto, moneda}].
+// Si no hay desglose explícito, cae al comportamiento viejo: 1 caja destino.
+function legsDeVenta(venta) {
+  let legs = venta.desglose_pago;
+  if (typeof legs === "string") { try { legs = JSON.parse(legs); } catch (e) { legs = null; } }
+  if (Array.isArray(legs) && legs.length > 0) {
+    return legs
+      .map(l => ({
+        caja: l.caja || venta.caja_destino || "Caja Dólares",
+        monto: parseFloat(l.monto) || 0,
+        moneda: l.moneda || (/pesos|cuenta pes/i.test(l.caja || "") ? "ARS" : "USD")
+      }))
+      .filter(l => l.monto > 0);
+  }
+  const esPesos = /pesos/i.test(venta.caja_destino || "");
+  return [{
+    caja: venta.caja_destino || "Caja Dólares",
+    monto: esPesos ? (parseFloat(venta.precio_venta_pesos) || 0) : (parseFloat(venta.precio_venta_usd) || 0),
+    moneda: esPesos ? "ARS" : "USD"
+  }].filter(l => l.monto > 0);
+}
+
+// Texto que detalla en el movimiento cómo se abonó (ej: " · Abonado: 700 USD + 78000 PESOS")
+function detalleAbono(legs) {
+  if (!Array.isArray(legs) || legs.length === 0) return "";
+  const fmt = m => {
+    const n = Math.round(parseFloat(m) * 100) / 100;
+    return n.toLocaleString("es-AR", { maximumFractionDigits: n % 1 === 0 ? 0 : 2 });
+  };
+  return " · Abonado: " + legs.map(l => `${fmt(l.monto)} ${l.moneda === "ARS" ? "PESOS" : l.moneda}`).join(" + ");
+}
+
+// Genera un movimiento de caja por cada pata del abono en memoria (memStore).
+function aplicarDesgloseMem(venta, legs, ref) {
+  const detalle = detalleAbono(legs);
+  const nuevos = [];
+  for (const leg of legs) {
+    const c = (memStore.cuentas_caja || []).find(c => c.nombre === leg.caja);
+    if (!c) continue;
+    c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + leg.monto;
+    nuevos.push({
+      id: Date.now() + nuevos.length,
+      fecha: venta.fecha,
+      cuenta_id: c.id,
+      cuenta_nombre: c.nombre,
+      tipo_movimiento: "ENTRADA",
+      categoria: "Venta",
+      concepto: "Venta: " + (venta.item_detalle || "") + detalle,
+      monto: leg.monto,
+      moneda: leg.moneda || c.moneda,
+      cotizacion: venta.cotizacion_dolar,
+      persona_asociada: venta.vendedor_nombre || "NP",
+      comprobante_ref: ref
+    });
+  }
+  if (nuevos.length) memStore.caja_movimientos = [...nuevos, ...(memStore.caja_movimientos || [])];
+}
+
+// Revierte en memoria todos los movimientos de caja de una venta y sus saldos.
+function revertirDesgloseMem(ref, matchFn) {
+  const esMovDeVenta = (m) => m.comprobante_ref === ref || (matchFn ? matchFn(m) : false);
+  const movs = (memStore.caja_movimientos || []).filter(esMovDeVenta);
+  movs.forEach(m => {
+    const caja = (memStore.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
+    if (caja) caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
+  });
+  if (movs.length > 0) memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !esMovDeVenta(m));
+  return movs.length;
+}
+async function aplicarDesglosePG(venta, legs, ref) {
+  const detalle = detalleAbono(legs);
+  for (const leg of legs) {
+    const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [leg.caja]).catch(() => null);
+    if (!cajaPG || !cajaPG.rows || !cajaPG.rows[0]) continue;
+    const cRow = cajaPG.rows[0];
+    await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [leg.monto, cRow.id]).catch(() => {});
+    await q(
+      `INSERT INTO caja_movimientos (fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [venta.fecha, cRow.id, cRow.nombre, "ENTRADA", "Venta", "Venta: " + (venta.item_detalle || "") + detalle, leg.monto, leg.moneda, venta.cotizacion_dolar, venta.vendedor_nombre || "NP", ref]
+    ).catch(() => {});
+  }
+}
+
+// Revierte en Postgres todos los movimientos de caja de una venta y su saldo.
+async function revertirDesglosePG(ref, itemDetalle, cajaFallback) {
+  let rows = [];
+  let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [ref]).catch(() => null);
+  if (movPG && movPG.rows && movPG.rows.length > 0) rows = movPG.rows;
+  if (rows.length === 0 && itemDetalle) {
+    movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2", [cajaFallback || "Caja Dólares", "%" + itemDetalle + "%"]).catch(() => null);
+    if (movPG && movPG.rows) rows = movPG.rows;
+  }
+  for (const m of rows) {
+    await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [parseFloat(m.monto) || 0, m.cuenta_id]).catch(() => {});
+    await q("DELETE FROM caja_movimientos WHERE id=$1", [m.id]).catch(() => {});
+  }
+  return rows.length;
 }
 
 // ---------------- ROUTES ----------------
@@ -536,7 +627,8 @@ app.post("/api/ventas", async (req, res) => {
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
     caja_destino: b.caja_destino || "Caja Dólares",
-    metodo_pago: b.metodo_pago || "Efectivo USD"
+    metodo_pago: b.metodo_pago || "Efectivo USD",
+    desglose_pago: b.desglose_pago || null
   };
 
   memStore.ventas = [newVenta, ...(memStore.ventas || [])];
@@ -555,26 +647,7 @@ app.post("/api/ventas", async (req, res) => {
   }
 
   if (b.impactar_caja !== false) {
-    const cIdx = (memStore.cuentas_caja || []).findIndex(c => c.nombre === b.caja_destino);
-    if (cIdx !== -1) {
-      const c = memStore.cuentas_caja[cIdx];
-      const monto = c.moneda === "ARS" ? precioPesos : precioUSD;
-      c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + monto;
-      memStore.caja_movimientos = [{
-        id: Date.now(),
-        fecha: newVenta.fecha,
-        cuenta_id: c.id,
-        cuenta_nombre: c.nombre,
-        tipo_movimiento: "ENTRADA",
-        categoria: "Venta",
-        concepto: "Venta: " + b.item_detalle,
-        monto: monto,
-        moneda: c.moneda,
-        cotizacion: dolar,
-        persona_asociada: b.vendedor_nombre || "NP",
-        comprobante_ref: "VENTA-#" + newVenta.id
-      }, ...(memStore.caja_movimientos || [])];
-    }
+    aplicarDesgloseMem(newVenta, legsDeVenta(newVenta), `VENTA-#${newVenta.id}`);
   }
 
   res.json({ success: true, venta: newVenta });
@@ -615,24 +688,9 @@ app.put("/api/ventas/:id", async (req, res) => {
 
   // Revertir impacto a caja de la venta original
   const refVenta = `VENTA-#${old.id}`;
-  const movOriginal = (memStore.caja_movimientos || []).filter(m => m.comprobante_ref === refVenta);
-  const movsARevertir = movOriginal.length > 0
-    ? movOriginal
-    : (memStore.caja_movimientos || []).filter(m =>
-        m.categoria === "Venta" &&
-        m.cuenta_nombre === old.caja_destino &&
-        m.concepto && m.concepto.includes(old.item_detalle)
-      );
-
-  movsARevertir.forEach(m => {
-    const caja = (memStore.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
-    if (caja) caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
-  });
-  if (movsARevertir.length > 0) {
-    const refOrConcepto = (m) => m.comprobante_ref === refVenta ||
-      (m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle));
-    memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !refOrConcepto(m));
-  }
+  revertirDesgloseMem(refVenta, (m) =>
+    m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle)
+  );
 
   const updated = {
     ...old,
@@ -656,6 +714,7 @@ app.put("/api/ventas/:id", async (req, res) => {
     comision_vendedor_usd: comisionUSD,
     caja_destino: b.caja_destino ?? old.caja_destino,
     metodo_pago: b.metodo_pago ?? old.metodo_pago,
+    desglose_pago: b.desglose_pago !== undefined ? b.desglose_pago : old.desglose_pago,
     observaciones: b.observaciones ?? old.observaciones,
     updated_at: new Date().toISOString()
   };
@@ -664,26 +723,7 @@ app.put("/api/ventas/:id", async (req, res) => {
 
   // Aplicar nuevo impacto a caja
   if (b.impactar_caja !== false) {
-    const cIdx = (memStore.cuentas_caja || []).findIndex(c => c.nombre === updated.caja_destino);
-    if (cIdx !== -1) {
-      const c = memStore.cuentas_caja[cIdx];
-      const monto = c.moneda === "ARS" ? precioPesos : precioUSD;
-      c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + monto;
-      memStore.caja_movimientos = [{
-        id: Date.now(),
-        fecha: updated.fecha,
-        cuenta_id: c.id,
-        cuenta_nombre: c.nombre,
-        tipo_movimiento: "ENTRADA",
-        categoria: "Venta",
-        concepto: "Venta: " + updated.item_detalle,
-        monto: monto,
-        moneda: c.moneda,
-        cotizacion: dolar,
-        persona_asociada: updated.vendedor_nombre || "NP",
-        comprobante_ref: refVenta
-      }, ...(memStore.caja_movimientos || [])];
-    }
+    aplicarDesgloseMem(updated, legsDeVenta(updated), refVenta);
   }
 
   // Persistir la edición en Postgres cuando está disponible
@@ -691,35 +731,17 @@ app.put("/api/ventas/:id", async (req, res) => {
     await getPool();
     if (isPostgresAvailable) {
       try {
-        // 1) Revertir el impacto a caja original en PG
-        const refVenta = "VENTA-#" + id;
-        let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [refVenta]).catch(() => null);
-        if (!movPG || !movPG.rows || movPG.rows.length === 0) {
-          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2 ORDER BY id LIMIT 1", [old.caja_destino, "%" + (old.item_detalle || "") + "%"]).catch(() => null);
-        }
-        if (movPG && movPG.rows && movPG.rows.length > 0) {
-          const m = movPG.rows[0];
-          await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [parseFloat(m.monto) || 0, m.cuenta_id]).catch(() => {});
-          await q("DELETE FROM caja_movimientos WHERE id=$1", [m.id]).catch(() => {});
-        }
+        // 1) Revertir TODOS los movimientos de caja originales en PG (una venta puede tener N patas)
+        await revertirDesglosePG("VENTA-#" + id, old.item_detalle, old.caja_destino);
         // 2) Actualizar la venta en PG (o insertarla si no existía)
         const upd = await q(
-          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, metodo_pago=$19, caja_destino=$20, observaciones=$21 WHERE id=$22`,
-          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.observaciones || "", parseInt(id)]
+          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, metodo_pago=$19, caja_destino=$20, desglose_pago=$21, observaciones=$22 WHERE id=$23`,
+          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.desglose_pago || null, updated.observaciones || "", parseInt(id)]
         );
         if (upd.rowCount === 0) {
           await persistVentaPG(updated, b.impactar_caja);
         } else if (b.impactar_caja !== false) {
-          const cajaPG = await q("SELECT * FROM cuentas_caja WHERE nombre=$1", [updated.caja_destino || "Caja Dólares"]).catch(() => null);
-          if (cajaPG && cajaPG.rows && cajaPG.rows[0]) {
-            const cRow = cajaPG.rows[0];
-            const monto = cRow.moneda === "ARS" ? updated.precio_venta_pesos : updated.precio_venta_usd;
-            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [monto, cRow.id]).catch(() => {});
-            await q(
-              `INSERT INTO caja_movimientos (fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
-              [updated.fecha, cRow.id, cRow.nombre, "ENTRADA", "Venta", "Venta: " + (updated.item_detalle || ""), monto, cRow.moneda, updated.cotizacion_dolar, updated.vendedor_nombre || "NP", refVenta]
-            ).catch(() => {});
-          }
+          await aplicarDesglosePG(updated, legsDeVenta(updated), "VENTA-#" + id);
         }
       } catch (e) {
         console.warn("PUT ventas -> PG error:", e.message);
@@ -756,16 +778,9 @@ app.delete("/api/ventas/:id", async (req, res) => {
   const refVenta = `VENTA-#${id}`;
 
   // Revertir dinero en caja y stock en (memStore), por consistencia de la instancia
-  const esMovDeVenta = (m) => m.comprobante_ref === refVenta ||
-    (m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle));
-  const movsARevertir = (memStore.caja_movimientos || []).filter(esMovDeVenta);
-  movsARevertir.forEach(m => {
-    const caja = (memStore.cuentas_caja || []).find(c => c.id === m.cuenta_id || c.nombre === m.cuenta_nombre);
-    if (caja) caja.saldo_actual = (parseFloat(caja.saldo_actual) || 0) - (parseFloat(m.monto) || 0);
-  });
-  if (movsARevertir.length > 0) {
-    memStore.caja_movimientos = (memStore.caja_movimientos || []).filter(m => !esMovDeVenta(m));
-  }
+  revertirDesgloseMem(refVenta, (m) =>
+    m.categoria === "Venta" && m.cuenta_nombre === old.caja_destino && m.concepto && m.concepto.includes(old.item_detalle)
+  );
   if (old.dispositivo_id) {
     const dIdx = (memStore.dispositivos || []).findIndex(d => d.id === parseInt(old.dispositivo_id));
     if (dIdx !== -1 && memStore.dispositivos[dIdx].estado === "Vendido") memStore.dispositivos[dIdx].estado = "En Stock";
@@ -777,16 +792,8 @@ app.delete("/api/ventas/:id", async (req, res) => {
     await getPool();
     if (isPostgresAvailable) {
       try {
-        let movPG = await q("SELECT * FROM caja_movimientos WHERE comprobante_ref=$1", [refVenta]).catch(() => null);
-        if ((!movPG || !movPG.rows || movPG.rows.length === 0) && old.item_detalle) {
-          movPG = await q("SELECT * FROM caja_movimientos WHERE categoria='Venta' AND cuenta_nombre=$1 AND concepto LIKE $2", [old.caja_destino || "Caja Dólares", "%" + (old.item_detalle || "") + "%"]).catch(() => null);
-        }
-        if (movPG && movPG.rows && movPG.rows.length > 0) {
-          for (const m of movPG.rows) {
-            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [parseFloat(m.monto) || 0, m.cuenta_id]).catch(() => {});
-            await q("DELETE FROM caja_movimientos WHERE id=$1", [m.id]).catch(() => {});
-          }
-        }
+        // Revertir TODOS los movimientos de caja (N patas) y luego borrar
+        await revertirDesglosePG(refVenta, old.item_detalle, old.caja_destino);
         if (old.dispositivo_id) {
           await q("UPDATE dispositivos SET estado='En Stock' WHERE id=$1 AND estado='Vendido'", [parseInt(old.dispositivo_id)]).catch(() => {});
         }
