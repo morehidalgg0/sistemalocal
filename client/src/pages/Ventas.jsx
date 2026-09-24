@@ -122,14 +122,14 @@ export default function Ventas({ config, onDataChange }) {
     }
   };
 
-  // Al primer cargar de ventas, fijar el mes por defecto: el más reciente con ventas (ej: SEPTIEMBRE)
+  // Al primer cargar de ventas, fijar el mes por defecto: el mes corriente (ej: SEPTIEMBRE)
   useEffect(() => {
     if (mesInitRef.current || !ventas || ventas.length === 0) return;
     mesInitRef.current = true;
     const keys = [...new Set(ventas.map(v => keyMes(v.fecha)))];
     const hoy = keyMes();
-    const disponibles = keys.includes(hoy) ? [...keys] : [hoy, ...keys];
-    setMesSeleccionado(disponibles.sort().reverse()[0]);
+    const conDat = keys.sort().reverse()[0];
+    setMesSeleccionado(keys.includes(hoy) ? hoy : (conDat || null));
   }, [ventas]);
 
   // Al seleccionar un teléfono de la lista visual

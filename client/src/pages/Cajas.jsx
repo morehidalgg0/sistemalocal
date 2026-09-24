@@ -1,5 +1,5 @@
 import fallbackData from "../data/fallbackData";
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw, Plus, CreditCard, Wallet, Landmark } from 'lucide-react';
 
 export default function Cajas({ config, onDataChange }) {
@@ -14,10 +14,11 @@ export default function Cajas({ config, onDataChange }) {
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
   const [cajaSeleccionada, setCajaSeleccionada] = useState(null); // caja activa para filtrar movimientos
   const [mesSeleccionado, setMesSeleccionado] = useState(null); // 'YYYY-MM' o null (todos los meses)
-  const [ordenMov, setOrdenMov] = useState('fecha_asc');
+  const [ordenMov, setOrdenMov] = useState('fecha_desc');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
 
   const dolarCotiz = parseFloat(config?.dolar_blue || 1480);
+  const mesInitRef = useRef(false);
 
   const [formData, setFormData] = useState({
     cuenta_id: '',
@@ -38,6 +39,16 @@ export default function Cajas({ config, onDataChange }) {
   useEffect(() => {
     fetchCajasData();
   }, []);
+
+  // Al primer cargar de movimientos, fijar el mes por defecto: el mes corriente (ej: SEPT 2026)
+  useEffect(() => {
+    if (mesInitRef.current || !movimientos || movimientos.length === 0) return;
+    mesInitRef.current = true;
+    const keys = [...new Set(movimientos.map(m => keyMes(m.fecha)))];
+    const hoy = keyMes();
+    const conDat = keys.sort().reverse()[0];
+    setMesSeleccionado(keys.includes(hoy) ? hoy : (conDat || null));
+  }, [movimientos]);
 
   const fetchCajasData = async () => {
     try {
