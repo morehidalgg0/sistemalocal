@@ -131,14 +131,15 @@ async function recomponerGananciaRegalos(rows) {
 // Reasigna venta.id al id serial real si la fila se inserta ahora.
 async function persistVentaPG(venta, impactarCaja) {
   if (!isPostgresAvailable) return;
-  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, regalo_componentes, regalo_costo_snapshot_usd, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, metodo_pago, caja_destino, desglose_pago, observaciones";
+  const cols = "fecha, dispositivo_id, item_detalle, cliente_nombre, cliente_contacto, vendedor_nombre, precio_venta_usd, precio_venta_pesos, cotizacion_dolar, costo_total_usd, costo_total_pesos, costo_reparacion, descuentos_regalos_detalle, descuento_monto, regalo_componentes, regalo_costo_snapshot_usd, ganancia_usd, ganancia_pesos, comision_vendedor_pesos, comision_vendedor_usd, comision_se_pago, entrega, metodo_pago, caja_destino, desglose_pago, observaciones";
   const v = [
     venta.fecha, venta.dispositivo_id, venta.item_detalle || "", venta.cliente_nombre || "", venta.cliente_contacto || "",
     venta.vendedor_nombre || "NP", venta.precio_venta_usd, venta.precio_venta_pesos, venta.cotizacion_dolar,
     venta.costo_total_usd, venta.costo_total_pesos, venta.costo_reparacion, venta.descuentos_regalos_detalle || "",
     venta.descuento_monto, venta.regalo_componentes || null, venta.regalo_costo_snapshot_usd || 0,
     venta.ganancia_usd, venta.ganancia_pesos, venta.comision_vendedor_pesos,
-    venta.comision_vendedor_usd, venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Dólares",
+    venta.comision_vendedor_usd, venta.comision_se_pago || false, venta.entrega || false,
+    venta.metodo_pago || "Efectivo USD", venta.caja_destino || "Caja Dólares",
     venta.desglose_pago || null,
     venta.observaciones || ""
   ];
@@ -712,6 +713,8 @@ app.put("/api/ventas/:id", async (req, res) => {
     ganancia_pesos: ganUSD * dolar,
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
+    comision_se_pago: b.comision_se_pago === undefined ? (old.comision_se_pago || false) : (b.comision_se_pago ? true : false),
+    entrega: b.entrega === undefined ? (old.entrega || false) : (b.entrega ? true : false),
     caja_destino: b.caja_destino ?? old.caja_destino,
     metodo_pago: b.metodo_pago ?? old.metodo_pago,
     desglose_pago: b.desglose_pago !== undefined ? b.desglose_pago : old.desglose_pago,
@@ -735,8 +738,8 @@ app.put("/api/ventas/:id", async (req, res) => {
         await revertirDesglosePG("VENTA-#" + id, old.item_detalle, old.caja_destino);
         // 2) Actualizar la venta en PG (o insertarla si no existía)
         const upd = await q(
-          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, metodo_pago=$19, caja_destino=$20, desglose_pago=$21, observaciones=$22 WHERE id=$23`,
-          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.desglose_pago || null, updated.observaciones || "", parseInt(id)]
+          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, comision_se_pago=$19, entrega=$20, metodo_pago=$21, caja_destino=$22, desglose_pago=$23, observaciones=$24 WHERE id=$25`,
+          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.comision_se_pago || false, updated.entrega || false, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.desglose_pago || null, updated.observaciones || "", parseInt(id)]
         );
         if (upd.rowCount === 0) {
           await persistVentaPG(updated, b.impactar_caja);
@@ -836,6 +839,26 @@ app.post("/api/cajas/movimientos", async (req, res) => {
   if (b.tipo_movimiento === "ENTRADA") c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + monto;
   else if (b.tipo_movimiento === "SALIDA") c.saldo_actual = (parseFloat(c.saldo_actual) || 0) - monto;
 
+  // Vínculo opcional con cuenta corriente: validar moneda
+  let entidadId = b.entidad_id ? parseInt(b.entidad_id) : null;
+  let entidad = null;
+  if (entidadId) {
+    if (process.env.DATABASE_URL) {
+      await getPool();
+      if (isPostgresAvailable) {
+        try {
+          const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [entidadId]).catch(() => null);
+          if (rE && rE.rows && rE.rows.length > 0) entidad = numericize(rE.rows[0]);
+        } catch (e) { console.warn("POST caja mov -> PG select entidad:", e.message); }
+      }
+    }
+    if (!entidad) entidad = (memStore.entidades_cc || []).find(en => en.id === entidadId) || null;
+    if (!entidad) return res.status(400).json({ error: "Cuenta corriente no encontrada" });
+    if (entidad.moneda_principal !== c.moneda) {
+      return res.status(400).json({ error: `La cuenta corriente de ${entidad.nombre} es en ${entidad.moneda_principal} y la caja es en ${c.moneda}. No se puede vincular.` });
+    }
+  }
+
   const newMov = {
     id: Date.now(),
     fecha: b.fecha || new Date().toISOString(),
@@ -848,7 +871,10 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     moneda: c.moneda,
     cotizacion: parseFloat(b.cotizacion) || 1,
     persona_asociada: b.persona_asociada || "",
-    comprobante_ref: b.comprobante_ref || ""
+    comprobante_ref: b.comprobante_ref || "",
+    entidad_id: entidadId,
+    caja_movimiento_id: null,
+    cc_movimiento_id: null
   };
   memStore.caja_movimientos = [newMov, ...(memStore.caja_movimientos || [])];
 
@@ -856,8 +882,8 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     await getPool();
     if (isPostgresAvailable) {
       try {
-        const cols = "fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref";
-        const vals = [newMov.fecha, newMov.cuenta_id, newMov.cuenta_nombre, newMov.tipo_movimiento, newMov.categoria, newMov.concepto, newMov.monto, newMov.moneda, newMov.cotizacion, newMov.persona_asociada, newMov.comprobante_ref || ""];
+        const cols = "fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref, entidad_id";
+        const vals = [newMov.fecha, newMov.cuenta_id, newMov.cuenta_nombre, newMov.tipo_movimiento, newMov.categoria, newMov.concepto, newMov.monto, newMov.moneda, newMov.cotizacion, newMov.persona_asociada, newMov.comprobante_ref || "", entidadId];
         const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
         const r = await q(`INSERT INTO caja_movimientos (${cols}) VALUES (${ph}) RETURNING id`, vals);
         if (r.rows && r.rows[0]) newMov.id = r.rows[0].id;
@@ -871,7 +897,417 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     }
   }
 
-  res.json({ success: true, movimiento: newMov, cuenta_actualizada: c });
+  // Si hay CC asociada: crear movimiento de cuenta corriente vinculado (PAGO/COBRO debita el saldo)
+  if (entidadId && entidad) {
+    const tipoCC = b.tipo_movimiento === "SALIDA" ? "PAGO_REALIZADO" : "COBRO_RECIBIDO";
+    const nuevoSaldo = (parseFloat(entidad.saldo_adeudado) || 0) - monto;
+    entidad.saldo_adeudado = nuevoSaldo;
+    const movCC = {
+      id: Date.now(),
+      entidad_id: entidadId,
+      fecha: newMov.fecha,
+      tipo: tipoCC,
+      concepto: newMov.concepto || (tipoCC === "PAGO_REALIZADO" ? "Pago desde caja" : "Cobro a la caja"),
+      monto: monto,
+      moneda: entidad.moneda_principal || c.moneda,
+      saldo_resultante: nuevoSaldo,
+      caja_movimiento_id: newMov.id,
+      observaciones: `Desde movimiento de caja #${newMov.id} (${c.nombre})`
+    };
+    const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === entidadId);
+    if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = nuevoSaldo;
+    memStore.movimientos_cc = [movCC, ...(memStore.movimientos_cc || [])];
+    if (process.env.DATABASE_URL) {
+      await getPool();
+      if (isPostgresAvailable) {
+        try {
+          const colsCC = "entidad_id, fecha, tipo, concepto, monto, moneda, saldo_resultante, caja_movimiento_id, observaciones";
+          const valsCC = [entidadId, movCC.fecha, movCC.tipo, movCC.concepto, monto, movCC.moneda, nuevoSaldo, newMov.id, movCC.observaciones || ""];
+          const phCC = valsCC.map((_, i) => "$" + (i + 1)).join(", ");
+          const rCC = await q(`INSERT INTO movimientos_cc (${colsCC}) VALUES (${phCC}) RETURNING id`, valsCC);
+          if (rCC.rows && rCC.rows[0]) { movCC.id = rCC.rows[0].id; newMov.cc_movimiento_id = movCC.id; }
+          await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [nuevoSaldo, entidadId]).catch(() => {});
+        } catch (e) {
+          console.warn("PG insert movimiento CC vinculado:", e.message);
+        }
+      }
+    }
+    newMov.cc_movimiento_id = movCC.id;
+  }
+
+  res.json({ success: true, movimiento: newMov, cuenta_actualizada: c, cc_movimiento_creado: !!(entidadId && entidad) });
+});
+
+app.get("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("GET caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+  res.json(mov);
+});
+
+app.put("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const b = req.body;
+
+  // Fuente de verdad: Postgres primero
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("PUT caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+
+  const cuentaId = parseInt(b.cuenta_id) || mov.cuenta_id;
+  const cuenta = (memStore.cuentas_caja || []).find(c => c.id === cuentaId);
+  const tipo = b.tipo_movimiento || mov.tipo_movimiento;
+  const monto = (b.monto !== undefined && b.monto !== "") ? (parseFloat(b.monto) || 0) : (parseFloat(mov.monto) || 0);
+
+  // Revertir el impacto del movimiento original sobre el saldo de la caja (si cambió o la caja es la misma)
+  const deltaOriginal = mov.tipo_movimiento === "ENTRADA" ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === "SALIDA" ? -(parseFloat(mov.monto) || 0) : 0);
+  const deltaNuevo = tipo === "ENTRADA" ? monto : (tipo === "SALIDA" ? -monto : 0);
+
+  // Vínculo CC: si el body trae entidad_id, interpretarlo ('' / 'null' => se desvincula)
+  let nuevaEntidadId = (b.entidad_id !== undefined && b.entidad_id !== "" && b.entidad_id !== null && b.entidad_id !== "null")
+    ? parseInt(b.entidad_id) : null;
+
+  // Validar moneda al vincular a una CC nueva
+  let entidadNueva = null;
+  if (nuevaEntidadId && new Set([mov.entidad_id, mov.caja_entidad_id]).has(nuevaEntidadId)) {
+    // sigue siendo la misma CC: no re-validamos
+  } else if (nuevaEntidadId) {
+    if (process.env.DATABASE_URL) {
+      await getPool();
+      if (isPostgresAvailable) {
+        try {
+          const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [nuevaEntidadId]).catch(() => null);
+          if (rE && rE.rows && rE.rows.length > 0) entidadNueva = numericize(rE.rows[0]);
+        } catch (e) { console.warn("PUT caja mov -> PG select entidad:", e.message); }
+      }
+    }
+    if (!entidadNueva) entidadNueva = (memStore.entidades_cc || []).find(en => en.id === nuevaEntidadId) || null;
+    if (!entidadNueva) return res.status(400).json({ error: "Cuenta corriente no encontrada" });
+    const monedaCaja = b.moneda || (cuenta ? cuenta.moneda : mov.moneda);
+    if (entidadNueva.moneda_principal !== monedaCaja) {
+      return res.status(400).json({ error: `La cuenta corriente de ${entidadNueva.nombre} es en ${entidadNueva.moneda_principal} y la caja es en ${monedaCaja}. No se puede vincular.` });
+    }
+  }
+
+  const updated = {
+    ...mov,
+    fecha: (b.fecha !== undefined && b.fecha !== "") ? b.fecha : (b.fecha === "" ? null : mov.fecha),
+    cuenta_id: cuentaId,
+    cuenta_nombre: (b.cuenta_nombre || (cuenta ? cuenta.nombre : mov.cuenta_nombre)),
+    tipo_movimiento: tipo,
+    categoria: b.categoria !== undefined ? b.categoria : mov.categoria,
+    concepto: b.concepto !== undefined ? b.concepto : mov.concepto,
+    monto: monto,
+    moneda: b.moneda || (cuenta ? cuenta.moneda : mov.moneda),
+    cotizacion: (b.cotizacion !== undefined && b.cotizacion !== "") ? (parseFloat(b.cotizacion) || 1) : (parseFloat(mov.cotizacion) || 1),
+    persona_asociada: b.persona_asociada !== undefined ? b.persona_asociada : mov.persona_asociada,
+    comprobante_ref: b.comprobante_ref !== undefined ? b.comprobante_ref : mov.comprobante_ref,
+    entidad_id: nuevaEntidadId
+  };
+
+  // --- Mantener sincronizado el movimiento CC vinculado ---
+  const entidadOriginalId = mov.entidad_id;
+  const entidadNuevaMismaCC = nuevaEntidadId && entidadOriginalId === nuevaEntidadId;
+
+  async function obtenerMovCCVinculado(cajaMovId) {
+    let mCC = null;
+    if (process.env.DATABASE_URL) {
+      await getPool();
+      if (isPostgresAvailable) {
+        try {
+          const r = await q("SELECT * FROM movimientos_cc WHERE caja_movimiento_id=$1 ORDER BY id DESC LIMIT 1", [cajaMovId]).catch(() => null);
+          if (r && r.rows && r.rows.length > 0) mCC = numericize(r.rows[0]);
+        } catch (e) { console.warn("GET mov CC vinculado:", e.message); }
+      }
+    }
+    if (!mCC) mCC = (memStore.movimientos_cc || []).find(m => m.caja_movimiento_id === cajaMovId) || null;
+    return mCC;
+  }
+
+  if (entidadOriginalId) {
+    // 1) Revertir el efecto del movimiento CC original sobre su saldo
+    const movCC = await obtenerMovCCVinculado(mov.id);
+    if (movCC) {
+      const revertir = entidadOriginalId !== nuevaEntidadId; // si se desvincula o cambia a otra CC, se revierte el saldo
+      if (revertir) {
+        const entidadOrig = await (async () => {
+          if (process.env.DATABASE_URL) {
+            await getPool();
+            if (isPostgresAvailable) {
+              try {
+                const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [entidadOriginalId]).catch(() => null);
+                if (rE && rE.rows && rE.rows.length > 0) return numericize(rE.rows[0]);
+              } catch (e) {}
+            }
+          }
+          return (memStore.entidades_cc || []).find(en => en.id === entidadOriginalId) || null;
+        })();
+        if (entidadOrig) {
+          entidadOrig.saldo_adeudado = (parseFloat(entidadOrig.saldo_adeudado) || 0) + (movCC.monto || 0);
+          const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === entidadOriginalId);
+          if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = entidadOrig.saldo_adeudado;
+          if (process.env.DATABASE_URL) {
+            await getPool();
+            if (isPostgresAvailable) {
+              await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [entidadOrig.saldo_adeudado, entidadOriginalId]).catch(() => {});
+            }
+          }
+        }
+        // Eliminar el movimiento CC vinculado (o actualizarlo si no cambia de CC)
+        if (process.env.DATABASE_URL) {
+          await getPool();
+          if (isPostgresAvailable) {
+            await q("DELETE FROM movimientos_cc WHERE id=$1", [movCC.id]).catch(() => {});
+          }
+        }
+        const mMIdx = (memStore.movimientos_cc || []).findIndex(m => m.id === movCC.id);
+        if (mMIdx !== -1) memStore.movimientos_cc.splice(mMIdx, 1);
+      }
+    }
+  }
+
+  if (nuevaEntidadId) {
+    if (entidadOriginalId === nuevaEntidadId) {
+      // Misma CC: actualizar el movimiento CC vinculado con nuevos datos
+      const movCC = await obtenerMovCCVinculado(mov.id);
+      if (movCC) {
+        const tipoCC = tipo === "SALIDA" ? "PAGO_REALIZADO" : "COBRO_RECIBIDO";
+        const entidadCC = await (async () => {
+          if (process.env.DATABASE_URL) {
+            await getPool();
+            if (isPostgresAvailable) {
+              try {
+                const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [nuevaEntidadId]).catch(() => null);
+                if (rE && rE.rows && rE.rows.length > 0) return numericize(rE.rows[0]);
+              } catch (e) {}
+            }
+          }
+          return (memStore.entidades_cc || []).find(en => en.id === nuevaEntidadId) || null;
+        })();
+        if (entidadCC) {
+          // El saldo fue revertido arriba (sumó el monto original). Ahora aplicamos el nuevo.
+          entidadCC.saldo_adeudado = (parseFloat(entidadCC.saldo_adeudado) || 0) - monto;
+          movCC.fecha = updated.fecha;
+          movCC.tipo = tipoCC;
+          movCC.concepto = updated.concepto || movCC.concepto;
+          movCC.monto = monto;
+          movCC.saldo_resultante = entidadCC.saldo_adeudado;
+          const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === nuevaEntidadId);
+          if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = entidadCC.saldo_adeudado;
+          const mIdxMem = (memStore.movimientos_cc || []).findIndex(m => m.id === movCC.id);
+          if (mIdxMem !== -1) memStore.movimientos_cc[mIdxMem] = movCC;
+          if (process.env.DATABASE_URL) {
+            await getPool();
+            if (isPostgresAvailable) {
+              await q("UPDATE movimientos_cc SET fecha=$1, tipo=$2, concepto=$3, monto=$4, saldo_resultante=$5 WHERE id=$6",
+                [movCC.fecha, movCC.tipo, movCC.concepto || "", movCC.monto, movCC.saldo_resultante, movCC.id]).catch(() => {});
+              await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [entidadCC.saldo_adeudado, nuevaEntidadId]).catch(() => {});
+            }
+          }
+        }
+      }
+    } else {
+      // Nueva CC distinta: crear movimiento CC convol cuando se pintó revertir (entidadOriginalId vacío o distinto)
+      // (mismo código que en POST)
+      let entidadObj = entidadNueva;
+      if (!entidadObj) {
+        if (process.env.DATABASE_URL) {
+          await getPool();
+          if (isPostgresAvailable) {
+            try {
+              const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [nuevaEntidadId]).catch(() => null);
+              if (rE && rE.rows && rE.rows.length > 0) entidadObj = numericize(rE.rows[0]);
+            } catch (e) {}
+          }
+        }
+        if (!entidadObj) entidadObj = (memStore.entidades_cc || []).find(en => en.id === nuevaEntidadId) || null;
+      }
+      if (entidadObj) {
+        const tipoCC = tipo === "SALIDA" ? "PAGO_REALIZADO" : "COBRO_RECIBIDO";
+        const nuevoSaldo = (parseFloat(entidadObj.saldo_adeudado) || 0) - monto;
+        entidadObj.saldo_adeudado = nuevoSaldo;
+        const movCC = {
+          id: Date.now(),
+          entidad_id: nuevaEntidadId,
+          fecha: updated.fecha,
+          tipo: tipoCC,
+          concepto: updated.concepto || (tipoCC === "PAGO_REALIZADO" ? "Pago desde caja" : "Cobro a la caja"),
+          monto: monto,
+          moneda: entidadObj.moneda_principal || updated.moneda,
+          saldo_resultante: nuevoSaldo,
+          caja_movimiento_id: id,
+          observaciones: `Desde movimiento de caja #${id}`
+        };
+        const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === nuevaEntidadId);
+        if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = nuevoSaldo;
+        memStore.movimientos_cc = [movCC, ...(memStore.movimientos_cc || [])];
+        if (process.env.DATABASE_URL) {
+          await getPool();
+          if (isPostgresAvailable) {
+            try {
+              const colsCC = "entidad_id, fecha, tipo, concepto, monto, moneda, saldo_resultante, caja_movimiento_id, observaciones";
+              const valsCC = [nuevaEntidadId, movCC.fecha, movCC.tipo, movCC.concepto, monto, movCC.moneda, nuevoSaldo, id, movCC.observaciones || ""];
+              const phCC = valsCC.map((_, i) => "$" + (i + 1)).join(", ");
+              const rCC = await q(`INSERT INTO movimientos_cc (${colsCC}) VALUES (${phCC}) RETURNING id`, valsCC);
+              if (rCC.rows && rCC.rows[0]) movCC.id = rCC.rows[0].id;
+              await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [nuevoSaldo, nuevaEntidadId]).catch(() => {});
+            } catch (e) {
+              console.warn("PG insert movimiento CC (PUT vinculado):", e.message);
+            }
+          }
+        }
+        updated.cc_movimiento_id = movCC.id;
+      }
+    }
+  }
+
+  const memIdx = (memStore.caja_movimientos || []).findIndex(m => m.id === id);
+  if (memIdx !== -1) memStore.caja_movimientos[memIdx] = updated;
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        // Ajustar el saldo de la caja correspondiente al movimiento
+        if (cuenta) {
+          const ajuste = deltaNuevo - deltaOriginal;
+          if (mov.cuenta_id === cuentaId && ajuste !== 0) {
+            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [ajuste, cuentaId]).catch(() => {});
+          }
+        }
+        await q("UPDATE caja_movimientos SET fecha=$1, cuenta_id=$2, cuenta_nombre=$3, tipo_movimiento=$4, categoria=$5, concepto=$6, monto=$7, moneda=$8, cotizacion=$9, persona_asociada=$10, comprobante_ref=$11, entidad_id=$12 WHERE id=$13",
+          [updated.fecha, updated.cuenta_id, updated.cuenta_nombre, updated.tipo_movimiento, updated.categoria || "Varios", updated.concepto || "", updated.monto, updated.moneda, updated.cotizacion, updated.persona_asociada || "", updated.comprobante_ref || "", updated.entidad_id, id]).catch(() => {});
+      } catch (e) {
+        console.warn("PUT caja movimiento -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, movimiento: updated });
+});
+
+app.delete("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  // Fuente de verdad: Postgres primero
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("DELETE caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+
+  const delta = mov.tipo_movimiento === "ENTRADA" ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === "SALIDA" ? -(parseFloat(mov.monto) || 0) : 0);
+
+  // Si el movimiento de caja estaba vinculado a una CC, revertir su saldo y borrar el movimiento CC
+  if (mov.entidad_id) {
+    const entidadId = parseInt(mov.entidad_id);
+    let mCC = null;
+    if (process.env.DATABASE_URL) {
+      await getPool();
+      if (isPostgresAvailable) {
+        try {
+          const rCC = await q("SELECT * FROM movimientos_cc WHERE caja_movimiento_id=$1 ORDER BY id DESC LIMIT 1", [id]).catch(() => null);
+          if (rCC && rCC.rows && rCC.rows.length > 0) mCC = numericize(rCC.rows[0]);
+        } catch (e) { console.warn("DELETE caja mov -> PG select mov CC:", e.message); }
+      }
+    }
+    if (!mCC) mCC = (memStore.movimientos_cc || []).find(m => m.caja_movimiento_id === id) || null;
+    if (mCC) {
+      // Revertir saldo de la entidad (el PAGO/COBRO debitó monto; hay que sumarlo de vuelta)
+      const montoCC = parseFloat(mCC.monto) || 0;
+      let entidad = null;
+      if (process.env.DATABASE_URL) {
+        await getPool();
+        if (isPostgresAvailable) {
+          try {
+            const rE = await q("SELECT * FROM entidades_cc WHERE id=$1", [entidadId]).catch(() => null);
+            if (rE && rE.rows && rE.rows.length > 0) entidad = numericize(rE.rows[0]);
+          } catch (e) {}
+        }
+      }
+      if (!entidad) entidad = (memStore.entidades_cc || []).find(en => en.id === entidadId) || null;
+      if (entidad) {
+        entidad.saldo_adeudado = (parseFloat(entidad.saldo_adeudado) || 0) + montoCC;
+        const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === entidadId);
+        if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = entidad.saldo_adeudado;
+        if (process.env.DATABASE_URL) {
+          await getPool();
+          if (isPostgresAvailable) {
+            await q("UPDATE entidades_cc SET saldo_adeudado=$1 WHERE id=$2", [entidad.saldo_adeudado, entidadId]).catch(() => {});
+          }
+        }
+      }
+      const mMIdx = (memStore.movimientos_cc || []).findIndex(m => m.id === mCC.id);
+      if (mMIdx !== -1) memStore.movimientos_cc.splice(mMIdx, 1);
+      if (process.env.DATABASE_URL) {
+        await getPool();
+        if (isPostgresAvailable) {
+          await q("DELETE FROM movimientos_cc WHERE id=$1", [mCC.id]).catch(() => {});
+        }
+      }
+    }
+  }
+
+  const memIdx = (memStore.caja_movimientos || []).findIndex(m => m.id === id);
+  if (memIdx !== -1) memStore.caja_movimientos.splice(memIdx, 1);
+  const cMemIdx = (memStore.cuentas_caja || []).findIndex(c => c.id === mov.cuenta_id);
+  if (cMemIdx !== -1 && delta !== 0) {
+    memStore.cuentas_caja[cMemIdx].saldo_actual = (parseFloat(memStore.cuentas_caja[cMemIdx].saldo_actual) || 0) - delta;
+  }
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        if (delta !== 0) {
+          await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [delta, mov.cuenta_id]).catch(() => {});
+        }
+        await q("DELETE FROM caja_movimientos WHERE id=$1", [id]).catch(() => {});
+      } catch (e) {
+        console.warn("DELETE caja movimiento -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, id });
 });
 
 app.get("/api/cuentas-corrientes", async (req, res) => {

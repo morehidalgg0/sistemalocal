@@ -30,7 +30,7 @@ const cuentas_caja = [
 
 const entidades_cc = [
   { id: 1, nombre: "Garden", tipo: "PROVEEDOR", contacto: "Mayorista", moneda_principal: "USD", saldo_adeudado: 10314, notas: "Proveedor mayorista de iPhones" },
-  { id: 2, nombre: "Lucas Moroni", tipo: "PROVEEDOR", contacto: "Lucas M", moneda_principal: "USD", saldo_adeudado: 2025, notas: "Proveedor de equipos" },
+  { id: 2, nombre: "Lucas Moroni", tipo: "PROVEEDOR", contacto: "Lucas M", moneda_principal: "USD", saldo_adeudado: 1550, notas: "Proveedor de equipos" },
   { id: 3, nombre: "Victor Diaz", tipo: "PROVEEDOR", contacto: "Victor Diaz", moneda_principal: "USD", saldo_adeudado: 0, notas: "Equipos y repuestos" },
   { id: 4, nombre: "Agus Black Apple", tipo: "PROVEEDOR", contacto: "Agus B", moneda_principal: "USD", saldo_adeudado: 2025, notas: "Proveedor" },
   { id: 5, nombre: "Ramiro Piu", tipo: "PROVEEDOR", contacto: "Ramiro", moneda_principal: "USD", saldo_adeudado: 0, notas: "Equipos" },
