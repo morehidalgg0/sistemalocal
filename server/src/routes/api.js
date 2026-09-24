@@ -163,6 +163,7 @@ router.get('/dashboard', (req, res) => {
     },
     equiposEnStock: (store.dispositivos || []).filter(d => d.estado === 'En Stock').length,
     reparacionesActivas: (store.reparaciones || []).filter(r => r.estado !== 'Entregado y Cobrado').length,
+    entidadesCC: (store.entidades_cc || []).slice().sort((a, b) => (parseFloat(b.saldo_adeudado) || 0) - (parseFloat(a.saldo_adeudado) || 0)),
     ultimasVentas: (store.ventas || []).slice(-5).reverse(),
     ultimosMovimientos: (store.caja_movimientos || []).slice(-6).reverse()
   });

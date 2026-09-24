@@ -236,38 +236,29 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
               Saldos en Cuenta Corriente
             </h2>
             <div className="space-y-2.5">
-              <div className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-xl border border-slate-700/40">
-                <div>
-                  <div className="text-sm font-semibold text-white">Garden (Mayorista)</div>
-                  <div className="text-xs text-slate-400">Proveedor principal</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-rose-400">$10,314 USD</div>
-                  <div className="text-[10px] text-slate-400">Adeudado</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-xl border border-slate-700/40">
-                <div>
-                  <div className="text-sm font-semibold text-white">Lucas Moroni</div>
-                  <div className="text-xs text-slate-400">Proveedor equipos</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-rose-400">$2,025 USD</div>
-                  <div className="text-[10px] text-slate-400">Adeudado</div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-xl border border-slate-700/40">
-                <div>
-                  <div className="text-sm font-semibold text-white">Ema Haase</div>
-                  <div className="text-xs text-slate-400">Socio / Cuenta</div>
-                </div>
-                <div className="text-right">
-                  <div className="text-sm font-bold text-rose-400">$446 USD</div>
-                  <div className="text-[10px] text-slate-400">Adeudado</div>
-                </div>
-              </div>
+              {(!data.entidadesCC || data.entidadesCC.length === 0) ? (
+                <div className="text-xs text-slate-500 py-3 text-center">Sin cuentas corrientes registradas.</div>
+              ) : (
+                data.entidadesCC.filter(e => (parseFloat(e.saldo_adeudado) || 0) !== 0).map(e => {
+                  const saldo = parseFloat(e.saldo_adeudado) || 0;
+                  const esDeuda = saldo > 0;
+                  const tipoLabel = { PROVEEDOR: "Proveedor", SOCIO: "Socio / Cuenta", TECNICO: "Taller técnico" }[e.tipo] || e.tipo;
+                  return (
+                    <div key={e.id} className="flex items-center justify-between p-2.5 bg-slate-800/50 rounded-xl border border-slate-700/40">
+                      <div>
+                        <div className="text-sm font-semibold text-white">{e.nombre}</div>
+                        <div className="text-xs text-slate-400">{tipoLabel}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className={`text-sm font-bold ${esDeuda ? "text-rose-400" : "text-emerald-400"}`}>
+                          {saldo < 0 ? "-" : ""}${Math.abs(saldo).toLocaleString('es-AR')} {e.moneda_principal || "USD"}
+                        </div>
+                        <div className="text-[10px] text-slate-400">{esDeuda ? "Adeudado" : "A favor"}</div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
             <button 
               onClick={() => onNavigate('cc')}

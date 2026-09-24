@@ -401,6 +401,7 @@ const ventasRaw = await q("SELECT * FROM ventas");
     const deudores = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo='DEUDOR' AND estado!='Cancelado'");
     const deudas = await q("SELECT COALESCE(SUM(monto_pendiente),0) as total FROM deudas_deudores WHERE tipo='DEUDA' AND estado!='Cancelado'");
     const ccProv = await q("SELECT COALESCE(SUM(saldo_adeudado),0) as total FROM entidades_cc WHERE tipo='PROVEEDOR'");
+    const entidadesCCRaw = await q("SELECT id, nombre, tipo, moneda_principal, saldo_adeudado FROM entidades_cc ORDER BY saldo_adeudado DESC");
     const dispEnStock = await q("SELECT COUNT(*) as c FROM dispositivos WHERE estado = 'En Stock'");
     const repActivas = await q("SELECT COUNT(*) as c FROM reparaciones WHERE estado != 'Entregado y Cobrado'");
     const ultimasVentas = await q("SELECT * FROM ventas ORDER BY id DESC LIMIT 5");
@@ -428,6 +429,7 @@ const ventasRaw = await q("SELECT * FROM ventas");
       },
       equiposEnStock: parseInt(dispEnStock.rows[0].c),
       reparacionesActivas: parseInt(repActivas.rows[0].c),
+      entidadesCC: entidadesCCRaw.rows.map(numericize),
       ultimasVentas: await recomponerGananciaRegalos(ultimasVentas.rows.map(numericize)),
       ultimosMovimientos: ultimosMovs.rows.map(numericize)
     });
@@ -478,6 +480,7 @@ const ventasRaw = await q("SELECT * FROM ventas");
       },
       equiposEnStock: (memStore.dispositivos || []).filter(d => d.estado === "En Stock").length,
       reparacionesActivas: (memStore.reparaciones || []).filter(r => r.estado !== "Entregado y Cobrado").length,
+      entidadesCC: (memStore.entidades_cc || []).slice().sort((a, b) => (parseFloat(b.saldo_adeudado) || 0) - (parseFloat(a.saldo_adeudado) || 0)),
       ultimasVentas: ventas.slice(-5).reverse(),
       ultimosMovimientos: (memStore.caja_movimientos || []).slice(-6).reverse()
     });
