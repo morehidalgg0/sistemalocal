@@ -606,7 +606,12 @@ setShowModal(true);
                       ${v.cotizacion_dolar}
                     </td>
                     <td className="py-3 px-4 text-right font-bold text-emerald-400 font-mono">
-                      +${Number(v.ganancia_usd || 0).toFixed(1)} USD
+                      <div className="flex items-center justify-end gap-1.5">
+                        {v.comision_se_pago ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                        ) : null}
+                        <span>+${Number(v.ganancia_usd || 0).toFixed(1)} USD</span>
+                      </div>
                       <span className="text-[10px] text-slate-400 block font-normal">
                         (~${v.ganancia_pesos?.toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS)
                       </span>
