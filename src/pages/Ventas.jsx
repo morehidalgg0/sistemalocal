@@ -430,25 +430,31 @@ setShowModal(true);
       return ordenVentas === 'fecha_desc' ? -d : d;
     });
 
-  // Métricas del mes: 2 vendedores (NP / MARDEL), equipos vendidos y pesos vendidos
+  // Métricas del mes: 2 vendedores (NP / MARDEL), equipos vendidos y ganancia por vendedor
   const statsVentas = useMemo(() => {
     const ventasDelMes = ventasMes.length;
     const porVendedor = {};
-    let pesosVendidos = 0;
+    let gananciaNP = 0, gananciaMardel = 0, gananciaOtros = 0;
     (ventasMes || []).forEach(v => {
       let vendedor = (v.vendedor_nombre || 'NP').trim();
       if (vendedor.toUpperCase() === 'MARDEL') vendedor = 'MARDEL';
       porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
-      const usd = parseFloat(v.precio_venta_usd) || 0;
-      const ars = parseFloat(v.precio_venta_pesos) || 0;
-      pesosVendidos += usd > 0 ? (usd * (parseFloat(v.cotizacion_dolar) || dolarCotiz)) : ars;
+      const gan = parseFloat(v.ganancia_usd) || 0;
+      if (vendedor === 'NP') gananciaNP += gan;
+      else if (vendedor === 'MARDEL') gananciaMardel += gan;
+      else gananciaOtros += gan;
     });
     const np = porVendedor['NP'] || 0;
     const mardel = porVendedor['MARDEL'] || 0;
     const otros = ventasDelMes - np - mardel;
     const pct = (n) => (ventasDelMes > 0 ? Math.round((n / ventasDelMes) * 100) : 0);
-    return { ventasDelMes, np, mardel, otros, pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros), pesosVendidos };
-  }, [ventasMes, dolarCotiz]);
+    return {
+      ventasDelMes, np, mardel, otros,
+      pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros),
+      gananciaNP, gananciaMardel, gananciaOtros,
+      pesosVendidos: (gananciaNP + gananciaMardel + gananciaOtros)
+    };
+  }, [ventasMes]);
 
   return (
     <div className="space-y-6">
@@ -668,12 +674,29 @@ setShowModal(true);
         </div>
 
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
-          <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Pesos Vendidos</div>
-          <div className="text-3xl font-bold text-emerald-400 mt-1 font-mono">
-            ${statsVentas.pesosVendidos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+          <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Ganancia por Vendedor</div>
+          <div className="mt-2 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-300">NP</span>
+              <span className="text-sm font-bold text-emerald-400 font-mono">+${statsVentas.gananciaNP.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-slate-300">MARDEL</span>
+              <span className="text-sm font-bold text-emerald-400 font-mono">+${statsVentas.gananciaMardel.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+            </div>
+            {statsVentas.otros > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-300">Otros</span>
+                <span className="text-sm font-bold text-slate-300 font-mono">+${statsVentas.gananciaOtros.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between border-t border-slate-800 pt-2">
+              <span className="text-xs text-slate-400">Total</span>
+              <span className="text-base font-bold text-emerald-400 font-mono">+${statsVentas.pesosVendidos.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+            </div>
           </div>
-          <div className="text-[11px] text-slate-500 mt-1">
-            {mesSeleccionado ? labelMes(mesSeleccionado) : 'Todos los meses'} · a dolar ${dolarCotiz}
+          <div className="text-[11px] text-slate-500 mt-2">
+            {mesSeleccionado ? labelMes(mesSeleccionado) : 'Todos los meses'}
           </div>
         </div>
       </div>
