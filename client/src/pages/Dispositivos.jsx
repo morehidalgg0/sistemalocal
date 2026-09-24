@@ -11,6 +11,8 @@ export default function Dispositivos({ config, onDataChange }) {
   const [filterEstado, setFilterEstado] = useState('ALL');
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
 
   const parseExtras = (v) => {
     if (Array.isArray(v)) return v;
@@ -183,6 +185,38 @@ export default function Dispositivos({ config, onDataChange }) {
     return matchesSearch && d.estado === filterEstado;
   });
 
+  const handleDragStart = (e, index) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', String(index)); } catch (err) {}
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragIndex !== index) setOverIndex(index);
+  };
+
+  const handleDrop = (e, index) => {
+    e.preventDefault();
+    if (dragIndex === null || dragIndex === index) {
+      setDragIndex(null);
+      setOverIndex(null);
+      return;
+    }
+    const reorder = (listaFiltrada, from, to) => {
+      const ids = listaFiltrada.map(d => d.id);
+      const [moved] = ids.splice(from, 1);
+      ids.splice(to, 0, moved);
+      const idToRank = {};
+      ids.forEach((id, idx) => { idToRank[id] = idx; });
+      return dispositivos.slice().sort((a, b) => (idToRank[a.id] ?? 0) - (idToRank[b.id] ?? 0));
+    };
+    setDispositivos(reorder(filtered, dragIndex, index));
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -244,7 +278,7 @@ export default function Dispositivos({ config, onDataChange }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map(d => {
+          {filtered.map((d, index) => {
             const estadoColors = {
               'En Stock': 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
               'Señado': 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20',
@@ -253,7 +287,25 @@ export default function Dispositivos({ config, onDataChange }) {
             };
 
             return (
-              <div key={d.id} className="bg-slate-900/90 border border-slate-800 p-5 rounded-2xl hover:border-slate-700 transition space-y-4 flex flex-col justify-between shadow-lg">
+              <div
+                key={d.id}
+                draggable
+                onDragStart={e => handleDragStart(e, index)}
+                onDragOver={e => handleDragOver(e, index)}
+                onDrop={e => handleDrop(e, index)}
+                onDragEnd={() => { setDragIndex(null); setOverIndex(null); }}
+                className={`bg-slate-900/90 border p-5 rounded-2xl transition space-y-4 flex flex-col justify-between shadow-lg cursor-grab active:cursor-grabbing select-none ${
+                  dragIndex === index
+                    ? 'border-indigo-500 opacity-50'
+                    : overIndex === index
+                      ? 'border-indigo-400 ring-2 ring-indigo-500/40'
+                      : 'border-slate-800 hover:border-slate-700'
+                }`}
+              >
+                <div className="w-full flex items-center justify-between">
+                  <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Stock</span>
+                  <span className="text-slate-600 text-lg leading-none">⠿</span>
+                </div>
                 <div>
                   <div className="flex items-start justify-between gap-2">
                     <div>
