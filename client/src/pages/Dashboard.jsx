@@ -236,7 +236,7 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
               Saldos en Cuenta Corriente
             </h2>
             <div className="space-y-2.5">
-              {(!data.entidadesCC || data.entidadesCC.length === 0) ? (
+              {(!data?.entidadesCC || data.entidadesCC.length === 0) ? (
                 <div className="text-xs text-slate-500 py-3 text-center">Sin cuentas corrientes registradas.</div>
               ) : (
                 data.entidadesCC.filter(e => (parseFloat(e.saldo_adeudado) || 0) !== 0).map(e => {
