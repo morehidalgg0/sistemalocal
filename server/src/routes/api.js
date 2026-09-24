@@ -288,6 +288,8 @@ router.post('/ventas', (req, res) => {
     ganancia_pesos: gananciaPesos,
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
+    comision_se_pago: req.body.comision_se_pago ? true : false,
+    entrega: req.body.entrega ? true : false,
     metodo_pago: req.body.metodo_pago || 'Efectivo USD',
     caja_destino: req.body.caja_destino || 'Caja Dólares',
     observaciones: req.body.observaciones || ''
@@ -397,6 +399,8 @@ router.put('/ventas/:id', (req, res) => {
     ganancia_pesos: gananciaPesos,
     comision_vendedor_pesos: comisionPesos,
     comision_vendedor_usd: comisionUSD,
+    comision_se_pago: req.body.comision_se_pago ?? ventaOriginal.comision_se_pago,
+    entrega: req.body.entrega ?? ventaOriginal.entrega,
     metodo_pago: req.body.metodo_pago ?? ventaOriginal.metodo_pago,
     caja_destino: req.body.caja_destino ?? ventaOriginal.caja_destino,
     observaciones: req.body.observaciones ?? ventaOriginal.observaciones,

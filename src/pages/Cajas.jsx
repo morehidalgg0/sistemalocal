@@ -1,14 +1,19 @@
 import fallbackData from "../data/fallbackData";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw, Plus, CreditCard, Wallet, Landmark } from 'lucide-react';
 
 export default function Cajas({ config, onDataChange }) {
+  const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
+  const keyMes = (f) => { const d = f ? new Date(f) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const labelMes = (k) => { const [y, m] = String(k || '').split('-'); const nombre = MESES_NOMBRES[parseInt(m, 10) - 1] || k; return String(y) === String(new Date().getFullYear()) ? nombre : `${nombre} ${y}`; };
+
   const [cajas, setCajas] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
   const [cajaSeleccionada, setCajaSeleccionada] = useState(null); // caja activa para filtrar movimientos
+  const [mesSeleccionado, setMesSeleccionado] = useState(null); // 'YYYY-MM' o null (todos los meses)
   const [ordenMov, setOrdenMov] = useState('fecha_asc');
   const [filtroTipo, setFiltroTipo] = useState('TODOS');
 
@@ -122,7 +127,15 @@ export default function Cajas({ config, onDataChange }) {
     }
   };
 
+  const mesesDisponibles = useMemo(() => {
+    const keys = [...new Set((movimientos || []).map(m => keyMes(m.fecha)))];
+    const hoy = keyMes();
+    if (!keys.includes(hoy)) keys.push(hoy);
+    return keys.sort().reverse().map(k => ({ key: k, label: labelMes(k) }));
+  }, [movimientos]);
+
   const movimientosFiltrados = movimientos
+    .filter(m => !mesSeleccionado ? true : keyMes(m.fecha) === mesSeleccionado)
     .filter(m => !cajaSeleccionada ? true : (m.cuenta_id === cajaSeleccionada.id || m.cuenta_nombre === cajaSeleccionada.nombre))
     .filter(m => filtroTipo === 'TODOS' || m.tipo_movimiento === filtroTipo)
     .sort((a, b) => {
@@ -227,6 +240,7 @@ export default function Cajas({ config, onDataChange }) {
             ) : (
               <>
                 Libro Diario de Caja y Movimientos
+                {mesSeleccionado && <span className="ml-2 text-sky-400 font-semibold">{labelMes(mesSeleccionado)}</span>}
                 <span className="ml-2 text-slate-400 font-normal">({movimientosFiltrados.length})</span>
               </>
             )}
@@ -244,6 +258,16 @@ export default function Cajas({ config, onDataChange }) {
         </div>
 
         <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 flex-wrap">
+          <select
+            value={mesSeleccionado || ''}
+            onChange={e => setMesSeleccionado(e.target.value || null)}
+            className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+          >
+            <option value="">Todos los meses</option>
+            {mesesDisponibles.map(o => (
+              <option key={o.key} value={o.key}>{o.label}</option>
+            ))}
+          </select>
           <select
             value={cajaSeleccionada?.id ?? ''}
             onChange={e => {
@@ -282,7 +306,7 @@ export default function Cajas({ config, onDataChange }) {
           <div className="text-center py-12 text-slate-500">Cargando movimientos...</div>
         ) : movimientosFiltrados.length === 0 ? (
           <div className="text-center py-12 text-slate-500 text-sm">
-            {cajaSeleccionada ? `Sin movimientos registrados en ${cajaSeleccionada.nombre}.` : 'No hay movimientos registrados.'}
+            {cajaSeleccionada ? `Sin movimientos registrados en ${cajaSeleccionada.nombre}${mesSeleccionado ? ' el mes de ' + labelMes(mesSeleccionado) : ''}.` : mesSeleccionado ? `No hay movimientos de ${labelMes(mesSeleccionado)} en este período.` : 'No hay movimientos registrados.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -327,6 +351,36 @@ export default function Cajas({ config, onDataChange }) {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {movimientosFiltrados.length > 0 && (
+          <div className="px-4 py-3 border-t border-slate-800 flex items-center gap-4 flex-wrap text-xs">
+            <span className="text-slate-400 font-semibold uppercase tracking-wider">
+              Total {mesSeleccionado ? labelMes(mesSeleccionado) : '(todos los meses)'}:
+            </span>
+            <span className="text-emerald-400 font-mono font-bold">
+              Entradas
+            </span>
+            <span className="text-slate-300 font-mono">
+              {(() => {
+                const usd = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA') && (m.moneda === 'USD' || m.moneda === 'USDT')).reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const ars = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA') && m.moneda === 'ARS').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const eur = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA') && m.moneda === 'EUR').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const ot = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA') && m.moneda !== 'USD' && m.moneda !== 'USDT' && m.moneda !== 'ARS' && m.moneda !== 'EUR').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                return [usd && `+$${usd.toLocaleString('es-AR')} USD`, ars && `+$${ars.toLocaleString('es-AR')} ARS`, eur && `+${eur.toLocaleString('es-AR')} EUR`, ot && `+${ot.toLocaleString('es-AR')} ${movimientosFiltrados.find(m => m.moneda !== 'USD' && m.moneda !== 'USDT' && m.moneda !== 'ARS' && m.moneda !== 'EUR')?.moneda || ''}`].filter(Boolean).join(' · ');
+              })()}
+            </span>
+            <span className="ml-2 text-rose-400 font-mono font-bold">Salidas</span>
+            <span className="text-slate-300 font-mono">
+              {(() => {
+                const usd = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'SALIDA') && (m.moneda === 'USD' || m.moneda === 'USDT')).reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const ars = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'SALIDA') && m.moneda === 'ARS').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const eur = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'SALIDA') && m.moneda === 'EUR').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                const ot = movimientosFiltrados.filter(m => (m.tipo_movimiento === 'SALIDA') && m.moneda !== 'USD' && m.moneda !== 'USDT' && m.moneda !== 'ARS' && m.moneda !== 'EUR').reduce((a, m) => a + (parseFloat(m.monto) || 0), 0);
+                return [usd && `-$${usd.toLocaleString('es-AR')} USD`, ars && `-$${ars.toLocaleString('es-AR')} ARS`, eur && `-${eur.toLocaleString('es-AR')} EUR`, ot && `-${ot.toLocaleString('es-AR')} ${movimientosFiltrados.find(m => m.moneda !== 'USD' && m.moneda !== 'USDT' && m.moneda !== 'ARS' && m.moneda !== 'EUR')?.moneda || ''}`].filter(Boolean).join(' · ');
+              })()}
+            </span>
           </div>
         )}
       </div>

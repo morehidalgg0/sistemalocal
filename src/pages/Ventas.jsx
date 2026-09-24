@@ -9,6 +9,7 @@ export default function Ventas({ config, onDataChange }) {
 
   const [ventas, setVentas] = useState([]);
   const [mesSeleccionado, setMesSeleccionado] = useState(null);
+  const [ordenVentas, setOrdenVentas] = useState('fecha_desc'); // 'fecha_desc' | 'fecha_asc'
   const mesInitRef = useRef(false);
   const [dispositivosStock, setDispositivosStock] = useState([]);
   const [vendedores, setVendedores] = useState([]);
@@ -72,6 +73,8 @@ export default function Ventas({ config, onDataChange }) {
     regalo_componentes: [],
     regalo_costo_snapshot_usd: 0,
     comision_vendedor_pesos: 0,
+    comision_se_pago: false,
+    entrega: false,
     caja_destino: 'Caja Dólares',
     metodo_pago: 'Efectivo USD',
     impactar_caja: true,
@@ -119,14 +122,14 @@ export default function Ventas({ config, onDataChange }) {
     }
   };
 
-  // Al primer cargar de ventas, fijar el mes por defecto: el último mes cerrado (ej: AGOSTO)
+  // Al primer cargar de ventas, fijar el mes por defecto: el más reciente con ventas (ej: SEPTIEMBRE)
   useEffect(() => {
     if (mesInitRef.current || !ventas || ventas.length === 0) return;
     mesInitRef.current = true;
     const keys = [...new Set(ventas.map(v => keyMes(v.fecha)))];
     const hoy = keyMes();
-    const previos = keys.filter(k => k < hoy).sort();
-    setMesSeleccionado(previos.length ? previos[previos.length - 1] : hoy);
+    const disponibles = keys.includes(hoy) ? [...keys] : [hoy, ...keys];
+    setMesSeleccionado(disponibles.sort().reverse()[0]);
   }, [ventas]);
 
   // Al seleccionar un teléfono de la lista visual
@@ -202,6 +205,8 @@ export default function Ventas({ config, onDataChange }) {
       regalo_componentes: componentes,
       regalo_costo_snapshot_usd: snapshotAcc,
       comision_vendedor_pesos: v.comision_vendedor_pesos || 0,
+      comision_se_pago: v.comision_se_pago ? true : false,
+      entrega: v.entrega ? true : false,
       caja_destino: v.caja_destino || 'Caja Dólares',
       metodo_pago: v.metodo_pago || 'Efectivo USD',
       impactar_caja: true,
@@ -339,6 +344,8 @@ setShowModal(true);
           regalo_componentes: [],
           regalo_costo_snapshot_usd: 0,
           comision_vendedor_pesos: 0,
+          comision_se_pago: false,
+          entrega: false,
           caja_destino: 'Caja Dólares',
           metodo_pago: 'Efectivo USD',
           impactar_caja: true,
@@ -371,7 +378,12 @@ setShowModal(true);
     return keys.sort().reverse().map(k => ({ key: k, label: labelMes(k) }));
   }, [ventas]);
 
-  const ventasMes = mesSeleccionado ? (ventas || []).filter(v => keyMes(v.fecha) === mesSeleccionado) : (ventas || []);
+  const ventasMes = (mesSeleccionado ? (ventas || []).filter(v => keyMes(v.fecha) === mesSeleccionado) : (ventas || []))
+    .slice()
+    .sort((a, b) => {
+      const d = new Date(a.fecha) - new Date(b.fecha);
+      return ordenVentas === 'fecha_desc' ? -d : d;
+    });
 
   return (
     <div className="space-y-6">
@@ -419,8 +431,19 @@ setShowModal(true);
             </select>
             <span className="text-slate-400 font-normal">({ventasMes.length})</span>
           </div>
-          <div className="text-xs text-slate-400">
-            Ganancia Total: <span className="text-emerald-400 font-bold">${ventasMes.reduce((acc, v) => acc + (parseFloat(v.ganancia_usd) || 0), 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+          <div className="flex items-center gap-3">
+            <select
+              value={ordenVentas}
+              onChange={(e) => setOrdenVentas(e.target.value)}
+              title="Ordenar por fecha"
+              className="bg-slate-800 border border-slate-700 text-white text-xs font-bold rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+            >
+              <option value="fecha_desc">Más recientes primero ↓</option>
+              <option value="fecha_asc">Más antiguas primero ↑</option>
+            </select>
+            <div className="text-xs text-slate-400">
+              Ganancia Total: <span className="text-emerald-400 font-bold">${ventasMes.reduce((acc, v) => acc + (parseFloat(v.ganancia_usd) || 0), 0).toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
+            </div>
           </div>
         </div>
 
@@ -452,7 +475,7 @@ setShowModal(true);
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
-                {ventasMes.slice().reverse().map((v) => (
+                {ventasMes.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
                       {new Date(v.fecha).toLocaleDateString('es-AR')}
@@ -683,9 +706,20 @@ setShowModal(true);
               {/* Si es manual o accesorio */}
               {tipoVenta === 'ACCESORIO_LIBRE' && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Detalle del Artículo / Accesorio *
-                  </label>
+                  <div className="flex items-center justify-between gap-3 mb-1">
+                    <label className="block text-xs font-semibold text-slate-300 uppercase">
+                      Detalle del Artículo / Accesorio *
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={formData.entrega}
+                        onChange={e => setFormData({ ...formData, entrega: e.target.checked })}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                      ¿Entrega?
+                    </label>
+                  </div>
                   <input
                     type="text"
                     required
@@ -708,7 +742,7 @@ setShowModal(true);
                     required
                     value={formData.cliente_nombre}
                     onChange={e => setFormData({ ...formData, cliente_nombre: e.target.value })}
-                    placeholder="Nombre y Apellido"
+                    placeholder="Cliente compra"
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-sky-500"
                   />
                 </div>
@@ -1017,9 +1051,20 @@ setShowModal(true);
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
-                    Comisión del Vendedor ($ ARS)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold text-slate-300 uppercase">
+                      Comisión del Vendedor ($ ARS)
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={formData.comision_se_pago}
+                        onChange={e => setFormData({ ...formData, comision_se_pago: e.target.checked })}
+                        className="w-4 h-4 accent-emerald-500"
+                      />
+                      ¿Se pagó?
+                    </label>
+                  </div>
                   <input
                     type="number"
                     step="any"

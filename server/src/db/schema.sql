@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS ventas (
   ganancia_pesos NUMERIC(14,2) DEFAULT 0,
   comision_vendedor_pesos NUMERIC(12,2) DEFAULT 0,
   comision_vendedor_usd NUMERIC(12,2) DEFAULT 0,
+  comision_se_pago BOOLEAN DEFAULT FALSE,
+  entrega BOOLEAN DEFAULT FALSE,
   metodo_pago VARCHAR(50) DEFAULT 'Efectivo', -- 'Caja USD', 'Caja Pesos', 'Transferencia/Banco', 'Lemon', 'USDT', 'Mixto'
   caja_destino VARCHAR(50) DEFAULT 'Caja Dólares',
   observaciones TEXT
