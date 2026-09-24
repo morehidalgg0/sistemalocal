@@ -20,7 +20,7 @@ const vendedores = [
 
 const cuentas_caja = [
   { id: 1, nombre: "Caja Dólares", tipo: "Caja Dólares", moneda: "USD", saldo_inicial: 1470, saldo_actual: 1470, activo: true },
-  { id: 2, nombre: "Caja Pesos", tipo: "Caja Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 500000, activo: true },
+  { id: 2, nombre: "Caja Pesos", tipo: "Caja Pesos", moneda: "ARS", saldo_inicial: 193200, saldo_actual: 193200, activo: true },
   { id: 4, nombre: "Lemon Ezequiel Mora", tipo: "Billetera Virtual", moneda: "ARS", saldo_inicial: 854000, saldo_actual: 174254, activo: true },
   { id: 5, nombre: "Lemon Ema Haase", tipo: "Billetera Virtual", moneda: "ARS", saldo_inicial: 0, saldo_actual: 1000, activo: true },
   { id: 6, nombre: "Dólares Cara Chica", tipo: "Cara Chica", moneda: "USD", saldo_inicial: 0, saldo_actual: 0, activo: true },
