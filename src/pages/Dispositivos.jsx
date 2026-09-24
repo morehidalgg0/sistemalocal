@@ -179,7 +179,7 @@ export default function Dispositivos({ config, onDataChange }) {
       (d.color && d.color.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (d.proveedor && d.proveedor.toLowerCase().includes(searchTerm.toLowerCase()));
     
-    if (filterEstado === 'ALL') return matchesSearch;
+    if (filterEstado === 'ALL') return matchesSearch && d.estado !== 'Vendido';
     return matchesSearch && d.estado === filterEstado;
   });
 
@@ -229,7 +229,7 @@ export default function Dispositivos({ config, onDataChange }) {
                   : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
               }`}
             >
-              {st === 'ALL' ? 'Todos' : st}
+              {st === 'ALL' ? 'Disponibles' : st}
             </button>
           ))}
         </div>
