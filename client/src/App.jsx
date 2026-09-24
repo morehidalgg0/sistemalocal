@@ -329,7 +329,7 @@ export default function App() {
         </header>
 
         {/* Dynamic Page Rendering */}
-        <div className="p-6 max-w-7xl w-full mx-auto">
+        <div className="p-6 w-full">
           {activeTab === "dashboard" && (
             <Dashboard 
               data={dashboardData} 
