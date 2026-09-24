@@ -1256,7 +1256,7 @@
       "tipo": "Caja Pesos",
       "moneda": "ARS",
       "saldo_inicial": 479000.0,
-      "saldo_actual": 50000.0,
+      "saldo_actual": 500000,
       "activo": true
     },
     {
