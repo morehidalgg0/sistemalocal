@@ -2038,7 +2038,7 @@
       "tipo": "PROVEEDOR",
       "contacto": "Lucas M",
       "moneda_principal": "USD",
-      "saldo_adeudado": -8115.0,
+      "saldo_adeudado": 1550,
       "notas": "Proveedor de equipos"
     },
     {
@@ -2230,105 +2230,6 @@
       "monto": 734,
       "moneda": "USD",
       "saldo_resultante": 446
-    },
-    {
-      "id": 9,
-      "entidad_id": 2,
-      "fecha": "2026-09-01T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS MACBOOK AIR M5",
-      "monto": 1400.0,
-      "moneda": "USD",
-      "saldo_resultante": 625.0,
-      "observaciones": "Desde caja movimiento #2950 Septiembre"
-    },
-    {
-      "id": 10,
-      "entidad_id": 2,
-      "fecha": "2026-09-05T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 3500.0,
-      "moneda": "USD",
-      "saldo_resultante": -2875.0,
-      "observaciones": "Desde caja movimiento #2959 Septiembre"
-    },
-    {
-      "id": 11,
-      "entidad_id": 2,
-      "fecha": "2026-09-15T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS CUENTA",
-      "monto": 840.0,
-      "moneda": "USD",
-      "saldo_resultante": -3715.0,
-      "observaciones": "Desde caja movimiento #2976 Septiembre"
-    },
-    {
-      "id": 12,
-      "entidad_id": 2,
-      "fecha": "2026-09-19T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 200.0,
-      "moneda": "USD",
-      "saldo_resultante": -3915.0,
-      "observaciones": "Desde caja movimiento #2978 Septiembre"
-    },
-    {
-      "id": 13,
-      "entidad_id": 2,
-      "fecha": "2026-09-19T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 450.0,
-      "moneda": "USD",
-      "saldo_resultante": -4365.0,
-      "observaciones": "Desde caja movimiento #2980 Septiembre"
-    },
-    {
-      "id": 14,
-      "entidad_id": 2,
-      "fecha": "2026-09-21T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 1000.0,
-      "moneda": "USD",
-      "saldo_resultante": -5365.0,
-      "observaciones": "Desde caja movimiento #2983 Septiembre"
-    },
-    {
-      "id": 15,
-      "entidad_id": 2,
-      "fecha": "2026-09-22T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 650.0,
-      "moneda": "USD",
-      "saldo_resultante": -6015.0,
-      "observaciones": "Desde caja movimiento #2989 Septiembre"
-    },
-    {
-      "id": 16,
-      "entidad_id": 2,
-      "fecha": "2026-09-22T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 1000.0,
-      "moneda": "USD",
-      "saldo_resultante": -7015.0,
-      "observaciones": "Desde caja movimiento #2990 Septiembre"
-    },
-    {
-      "id": 17,
-      "entidad_id": 2,
-      "fecha": "2026-09-23T00:00:00.000Z",
-      "tipo": "PAGO_REALIZADO",
-      "concepto": "PAGO LUCAS",
-      "monto": 1100.0,
-      "moneda": "USD",
-      "saldo_resultante": -8115.0,
-      "observaciones": "Desde caja movimiento #2996 Septiembre"
     }
   ],
   "reparaciones": [
