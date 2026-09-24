@@ -497,6 +497,63 @@ router.post('/cajas/movimientos', (req, res) => {
   res.json({ success: true, movimiento: nuevoMov, cuenta_actualizada: cuenta });
 });
 
+router.put('/cajas/movimientos/:id', (req, res) => {
+  const store = db.getInMemoryDB();
+  const id = parseInt(req.params.id);
+  const index = (store.caja_movimientos || []).findIndex(m => m.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Movimiento no encontrado' });
+
+  const movOriginal = store.caja_movimientos[index];
+  const cuenta = (store.cuentas_caja || []).find(c => c.id === parseInt(req.body.cuenta_id) || c.nombre === req.body.cuenta_nombre) || (store.cuentas_caja || []).find(c => c.id === movOriginal.cuenta_id || c.nombre === movOriginal.cuenta_nombre);
+  if (!cuenta) return res.status(400).json({ error: 'Caja o cuenta no encontrada' });
+
+  const tipo = req.body.tipo_movimiento || movOriginal.tipo_movimiento;
+  const monto = (req.body.monto !== undefined && req.body.monto !== '') ? (parseFloat(req.body.monto) || 0) : (parseFloat(movOriginal.monto) || 0);
+
+  const deltaOriginal = movOriginal.tipo_movimiento === 'ENTRADA' ? (parseFloat(movOriginal.monto) || 0) : (movOriginal.tipo_movimiento === 'SALIDA' ? -(parseFloat(movOriginal.monto) || 0) : 0);
+  const deltaNuevo = tipo === 'ENTRADA' ? monto : (tipo === 'SALIDA' ? -monto : 0);
+
+  if (movOriginal.cuenta_id === cuenta.id) {
+    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - deltaOriginal + deltaNuevo;
+  }
+
+  store.caja_movimientos[index] = {
+    ...movOriginal,
+    fecha: (req.body.fecha !== undefined && req.body.fecha !== '') ? req.body.fecha : (req.body.fecha === '' ? null : movOriginal.fecha),
+    cuenta_id: cuenta.id,
+    cuenta_nombre: cuenta.nombre,
+    tipo_movimiento: tipo,
+    categoria: req.body.categoria !== undefined ? req.body.categoria : movOriginal.categoria,
+    concepto: req.body.concepto !== undefined ? req.body.concepto : movOriginal.concepto,
+    monto: monto,
+    moneda: cuenta.moneda,
+    cotizacion: (req.body.cotizacion !== undefined && req.body.cotizacion !== '') ? (parseFloat(req.body.cotizacion) || 1) : (parseFloat(movOriginal.cotizacion) || 1),
+    persona_asociada: req.body.persona_asociada !== undefined ? req.body.persona_asociada : movOriginal.persona_asociada,
+    comprobante_ref: req.body.comprobante_ref !== undefined ? req.body.comprobante_ref : movOriginal.comprobante_ref,
+    observaciones: req.body.observaciones !== undefined ? req.body.observaciones : movOriginal.observaciones
+  };
+  db.saveJsonStore();
+  res.json({ success: true, movimiento: store.caja_movimientos[index] });
+});
+
+router.delete('/cajas/movimientos/:id', (req, res) => {
+  const store = db.getInMemoryDB();
+  const id = parseInt(req.params.id);
+  const index = (store.caja_movimientos || []).findIndex(m => m.id === id);
+  if (index === -1) return res.status(404).json({ error: 'Movimiento no encontrado' });
+
+  const mov = store.caja_movimientos[index];
+  const delta = mov.tipo_movimiento === 'ENTRADA' ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === 'SALIDA' ? -(parseFloat(mov.monto) || 0) : 0);
+  const cuenta = (store.cuentas_caja || []).find(c => c.id === mov.cuenta_id || c.nombre === mov.cuenta_nombre);
+  if (cuenta && delta !== 0) {
+    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - delta;
+  }
+
+  store.caja_movimientos.splice(index, 1);
+  db.saveJsonStore();
+  res.json({ success: true, id });
+});
+
 // Rutas de Cuentas Corrientes
 router.get('/cuentas-corrientes', (req, res) => {
   const store = db.getInMemoryDB();

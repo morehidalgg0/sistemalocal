@@ -1,6 +1,6 @@
 import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw, Plus, CreditCard, Wallet, Landmark } from 'lucide-react';
+import { DollarSign, ArrowUpRight, ArrowDownRight, RefreshCw, Plus, CreditCard, Wallet, Landmark, Pencil, Trash2 } from 'lucide-react';
 
 export default function Cajas({ config, onDataChange }) {
   const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
@@ -12,6 +12,7 @@ export default function Cajas({ config, onDataChange }) {
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
+  const [editandoMovimiento, setEditandoMovimiento] = useState(null); // movimiento en edición o null
   const [cajaSeleccionada, setCajaSeleccionada] = useState(null); // caja activa para filtrar movimientos
   const [mesSeleccionado, setMesSeleccionado] = useState(null); // 'YYYY-MM' o null (todos los meses)
   const [ordenMov, setOrdenMov] = useState('fecha_desc');
@@ -99,6 +100,7 @@ export default function Cajas({ config, onDataChange }) {
         });
         if (res.ok) {
           setShowModal(false);
+          setEditandoMovimiento(null);
           fetchCajasData();
           if (onDataChange) onDataChange();
         }
@@ -121,6 +123,7 @@ export default function Cajas({ config, onDataChange }) {
         });
         if (res.ok) {
           setShowModal(false);
+          setEditandoMovimiento(null);
           fetchCajasData();
           if (onDataChange) onDataChange();
         }
@@ -128,6 +131,81 @@ export default function Cajas({ config, onDataChange }) {
     } catch (err) {
       console.error("Error guardando movimiento de caja:", err);
     }
+  };
+
+  // Al editar un movimiento existente, precargar el formulario con sus datos
+  const handleEditMovimiento = (m) => {
+    setEditandoMovimiento(m);
+    setModalType('MOVIMIENTO');
+    setFormData({
+      cuenta_id: m.cuenta_id || '',
+      tipo_movimiento: m.tipo_movimiento === 'CAMBIO_DIVISA' ? 'ENTRADA' : (m.tipo_movimiento || 'ENTRADA'),
+      categoria: m.categoria || 'Varios',
+      concepto: m.concepto || '',
+      monto: m.monto ?? '',
+      cotizacion: parseFloat(m.cotizacion) || dolarCotiz,
+      persona_asociada: m.persona_asociada || '',
+      comprobante_ref: m.comprobante_ref || '',
+      cuenta_origen_id: '',
+      cuenta_destino_id: '',
+      monto_usd_comprado: '',
+      precio_dolar_pago: dolarCotiz
+    });
+    setShowModal(true);
+  };
+
+  const handleDeleteMovimiento = async (m) => {
+    const detalle = m.concepto || 'movimiento';
+    const ok = window.confirm(`¿Borrar el movimiento "${detalle}"?\n\nSe revierte el saldo de la caja ${m.cuenta_nombre}. Esta acción no se puede deshacer.`);
+    if (!ok) return;
+    try {
+      const res = await fetch(`/api/cajas/movimientos/${m.id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Error al eliminar el movimiento');
+      await fetchCajasData();
+      if (onDataChange) onDataChange();
+      alert('Movimiento eliminado. Saldo de caja revertido.');
+    } catch (err) {
+      console.error('Error eliminando movimiento:', err);
+      alert('No se pudo eliminar el movimiento. Probá de nuevo.');
+    }
+  };
+
+  // Modal de nuevo/edición de movimiento de caja
+  const guardarMovimiento = async (e) => {
+    e.preventDefault();
+    if (editandoMovimiento) {
+      try {
+        const payload = {
+          cuenta_id: formData.cuenta_id,
+          cuenta_nombre: cajas.find(c => c.id === parseInt(formData.cuenta_id))?.nombre,
+          tipo_movimiento: formData.tipo_movimiento,
+          categoria: formData.categoria,
+          concepto: formData.concepto,
+          monto: parseFloat(formData.monto) || 0,
+          cotizacion: parseFloat(formData.cotizacion) || dolarCotiz,
+          persona_asociada: formData.persona_asociada,
+          comprobante_ref: formData.comprobante_ref
+        };
+        const res = await fetch(`/api/cajas/movimientos/${editandoMovimiento.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          setShowModal(false);
+          setEditandoMovimiento(null);
+          await fetchCajasData();
+          if (onDataChange) onDataChange();
+        } else {
+          alert('No se pudo actualizar el movimiento.');
+        }
+      } catch (err) {
+        console.error('Error actualizando movimiento:', err);
+        alert('No se pudo actualizar el movimiento. Probá de nuevo.');
+      }
+      return;
+    }
+    await handleCreateMovimiento(e);
   };
 
   const getIconForType = (tipo) => {
@@ -176,6 +254,7 @@ export default function Cajas({ config, onDataChange }) {
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
+              setEditandoMovimiento(null);
               setModalType('CAMBIO_DIVISA');
               setShowModal(true);
             }}
@@ -186,6 +265,7 @@ export default function Cajas({ config, onDataChange }) {
           </button>
           <button
             onClick={() => {
+              setEditandoMovimiento(null);
               setModalType('MOVIMIENTO');
               setShowModal(true);
             }}
@@ -330,6 +410,7 @@ export default function Cajas({ config, onDataChange }) {
                   <th className="py-3 px-4">Concepto / Detalle</th>
                   <th className="py-3 px-4">Asociado</th>
                   <th className="py-3 px-4 text-right">Monto</th>
+                  <th className="py-3 px-4 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800">
@@ -356,6 +437,24 @@ export default function Cajas({ config, onDataChange }) {
                       </td>
                       <td className={`py-3 px-4 text-right font-bold font-mono ${isEntrada ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {isEntrada ? '+' : '-'}${m.monto?.toLocaleString('es-AR')} {m.moneda}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEditMovimiento(m)}
+                            title="Editar movimiento"
+                            className="p-2 rounded-lg text-slate-400 hover:text-sky-400 hover:bg-sky-500/10 transition"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteMovimiento(m)}
+                            title="Eliminar movimiento"
+                            className="p-2 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -402,7 +501,12 @@ export default function Cajas({ config, onDataChange }) {
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                {modalType === 'CAMBIO_DIVISA' ? (
+                {editandoMovimiento ? (
+                  <>
+                    <DollarSign className="w-5 h-5 text-sky-400" />
+                    Editar Movimiento de Caja
+                  </>
+                ) : modalType === 'CAMBIO_DIVISA' ? (
                   <>
                     <RefreshCw className="w-5 h-5 text-emerald-400" />
                     Operación de Cambio (Compra/Venta USD)
@@ -414,10 +518,10 @@ export default function Cajas({ config, onDataChange }) {
                   </>
                 )}
               </h2>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
+              <button onClick={() => { setShowModal(false); setEditandoMovimiento(null); }} className="text-slate-400 hover:text-white text-lg font-bold">✕</button>
             </div>
 
-            <form onSubmit={handleCreateMovimiento} className="space-y-4">
+            <form onSubmit={guardarMovimiento} className="space-y-4">
               {modalType === 'CAMBIO_DIVISA' ? (
                 <>
                   <div className="grid grid-cols-2 gap-3">
@@ -574,9 +678,9 @@ export default function Cajas({ config, onDataChange }) {
               )}
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
+                <button type="button" onClick={() => { setShowModal(false); setEditandoMovimiento(null); }} className="px-4 py-2 text-slate-400 text-sm">Cancelar</button>
                 <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold px-5 py-2 rounded-xl text-sm shadow-lg shadow-emerald-600/30">
-                  Registrar en Caja
+                  {editandoMovimiento ? 'Guardar Cambios' : 'Registrar en Caja'}
                 </button>
               </div>
             </form>

@@ -877,6 +877,145 @@ app.post("/api/cajas/movimientos", async (req, res) => {
   res.json({ success: true, movimiento: newMov, cuenta_actualizada: c });
 });
 
+app.get("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("GET caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+  res.json(mov);
+});
+
+app.put("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+  const b = req.body;
+
+  // Fuente de verdad: Postgres primero
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("PUT caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+
+  const cuentaId = parseInt(b.cuenta_id) || mov.cuenta_id;
+  const cuenta = (memStore.cuentas_caja || []).find(c => c.id === cuentaId);
+  const tipo = b.tipo_movimiento || mov.tipo_movimiento;
+  const monto = (b.monto !== undefined && b.monto !== "") ? (parseFloat(b.monto) || 0) : (parseFloat(mov.monto) || 0);
+
+  // Revertir el impacto del movimiento original sobre el saldo de la caja (si cambió o la caja es la misma)
+  const deltaOriginal = mov.tipo_movimiento === "ENTRADA" ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === "SALIDA" ? -(parseFloat(mov.monto) || 0) : 0);
+  const deltaNuevo = tipo === "ENTRADA" ? monto : (tipo === "SALIDA" ? -monto : 0);
+
+  const updated = {
+    ...mov,
+    fecha: (b.fecha !== undefined && b.fecha !== "") ? b.fecha : (b.fecha === "" ? null : mov.fecha),
+    cuenta_id: cuentaId,
+    cuenta_nombre: (b.cuenta_nombre || (cuenta ? cuenta.nombre : mov.cuenta_nombre)),
+    tipo_movimiento: tipo,
+    categoria: b.categoria !== undefined ? b.categoria : mov.categoria,
+    concepto: b.concepto !== undefined ? b.concepto : mov.concepto,
+    monto: monto,
+    moneda: b.moneda || (cuenta ? cuenta.moneda : mov.moneda),
+    cotizacion: (b.cotizacion !== undefined && b.cotizacion !== "") ? (parseFloat(b.cotizacion) || 1) : (parseFloat(mov.cotizacion) || 1),
+    persona_asociada: b.persona_asociada !== undefined ? b.persona_asociada : mov.persona_asociada,
+    comprobante_ref: b.comprobante_ref !== undefined ? b.comprobante_ref : mov.comprobante_ref
+  };
+
+  const memIdx = (memStore.caja_movimientos || []).findIndex(m => m.id === id);
+  if (memIdx !== -1) memStore.caja_movimientos[memIdx] = updated;
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        // Ajustar el saldo de la caja correspondiente al movimiento
+        if (cuenta) {
+          const ajuste = deltaNuevo - deltaOriginal;
+          if (mov.cuenta_id === cuentaId && ajuste !== 0) {
+            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [ajuste, cuentaId]).catch(() => {});
+          }
+        }
+        await q("UPDATE caja_movimientos SET fecha=$1, cuenta_id=$2, cuenta_nombre=$3, tipo_movimiento=$4, categoria=$5, concepto=$6, monto=$7, moneda=$8, cotizacion=$9, persona_asociada=$10, comprobante_ref=$11 WHERE id=$12",
+          [updated.fecha, updated.cuenta_id, updated.cuenta_nombre, updated.tipo_movimiento, updated.categoria || "Varios", updated.concepto || "", updated.monto, updated.moneda, updated.cotizacion, updated.persona_asociada || "", updated.comprobante_ref || "", id]).catch(() => {});
+      } catch (e) {
+        console.warn("PUT caja movimiento -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, movimiento: updated });
+});
+
+app.delete("/api/cajas/movimientos/:id", async (req, res) => {
+  const id = parseInt(req.params.id);
+
+  // Fuente de verdad: Postgres primero
+  let mov = null;
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        const r = await q("SELECT * FROM caja_movimientos WHERE id=$1", [id]).catch(() => null);
+        if (r && r.rows && r.rows.length > 0) mov = numericize(r.rows[0]);
+      } catch (e) {
+        console.warn("DELETE caja movimiento -> PG select error:", e.message);
+      }
+    }
+  }
+  if (!mov) {
+    mov = (memStore.caja_movimientos || []).find(m => m.id === id) || null;
+  }
+  if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
+
+  const delta = mov.tipo_movimiento === "ENTRADA" ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === "SALIDA" ? -(parseFloat(mov.monto) || 0) : 0);
+
+  const memIdx = (memStore.caja_movimientos || []).findIndex(m => m.id === id);
+  if (memIdx !== -1) memStore.caja_movimientos.splice(memIdx, 1);
+  const cMemIdx = (memStore.cuentas_caja || []).findIndex(c => c.id === mov.cuenta_id);
+  if (cMemIdx !== -1 && delta !== 0) {
+    memStore.cuentas_caja[cMemIdx].saldo_actual = (parseFloat(memStore.cuentas_caja[cMemIdx].saldo_actual) || 0) - delta;
+  }
+
+  if (process.env.DATABASE_URL) {
+    await getPool();
+    if (isPostgresAvailable) {
+      try {
+        if (delta !== 0) {
+          await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [delta, mov.cuenta_id]).catch(() => {});
+        }
+        await q("DELETE FROM caja_movimientos WHERE id=$1", [id]).catch(() => {});
+      } catch (e) {
+        console.warn("DELETE caja movimiento -> PG error:", e.message);
+      }
+    }
+  }
+
+  res.json({ success: true, id });
+});
+
 app.get("/api/cuentas-corrientes", async (req, res) => {
   try {
     const r = await q("SELECT * FROM entidades_cc ORDER BY id");
