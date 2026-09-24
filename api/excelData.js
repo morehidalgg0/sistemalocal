@@ -30,7 +30,7 @@ const cuentas_caja = [
 
 const entidades_cc = [
   { id: 1, nombre: "Garden", tipo: "PROVEEDOR", contacto: "Mayorista", moneda_principal: "USD", saldo_adeudado: 10314, notas: "Proveedor mayorista de iPhones" },
-  { id: 2, nombre: "Lucas Moroni", tipo: "PROVEEDOR", contacto: "Lucas M", moneda_principal: "USD", saldo_adeudado: 2025, notas: "Proveedor de equipos" },
+  { id: 2, nombre: "Lucas Moroni", tipo: "PROVEEDOR", contacto: "Lucas M", moneda_principal: "USD", saldo_adeudado: -8115, notas: "Proveedor de equipos" },
   { id: 3, nombre: "Victor Diaz", tipo: "PROVEEDOR", contacto: "Victor Diaz", moneda_principal: "USD", saldo_adeudado: 0, notas: "Equipos y repuestos" },
   { id: 4, nombre: "Agus Black Apple", tipo: "PROVEEDOR", contacto: "Agus B", moneda_principal: "USD", saldo_adeudado: 2025, notas: "Proveedor" },
   { id: 5, nombre: "Ramiro Piu", tipo: "PROVEEDOR", contacto: "Ramiro", moneda_principal: "USD", saldo_adeudado: 0, notas: "Equipos" },
@@ -800,6 +800,15 @@ const movimientos_cc = [
   { id: 4, entidad_id: 2, fecha: "2026-08-01T10:00:00.000Z", tipo: "ENTREGA_EQUIPO", concepto: "iPhone 16 Pro Desert 256 + 16 Blanco", monto: 2265, moneda: "USD", saldo_resultante: 4125 },
   { id: 5, entidad_id: 2, fecha: "2026-08-04T12:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "Pago MacBook y equipos", monto: 1400, moneda: "USD", saldo_resultante: 2725 },
   { id: 6, entidad_id: 2, fecha: "2026-08-07T14:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "Pago saldo efectivo", monto: 700, moneda: "USD", saldo_resultante: 2025 },
+  { id: 9, entidad_id: 2, fecha: "2026-09-01T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS MACBOOK AIR M5", monto: 1400, moneda: "USD", saldo_resultante: 625 },
+  { id: 10, entidad_id: 2, fecha: "2026-09-05T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 3500, moneda: "USD", saldo_resultante: -2875 },
+  { id: 11, entidad_id: 2, fecha: "2026-09-15T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS CUENTA", monto: 840, moneda: "USD", saldo_resultante: -3715 },
+  { id: 12, entidad_id: 2, fecha: "2026-09-19T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 200, moneda: "USD", saldo_resultante: -3915 },
+  { id: 13, entidad_id: 2, fecha: "2026-09-19T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 450, moneda: "USD", saldo_resultante: -4365 },
+  { id: 14, entidad_id: 2, fecha: "2026-09-21T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 1000, moneda: "USD", saldo_resultante: -5365 },
+  { id: 15, entidad_id: 2, fecha: "2026-09-22T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 650, moneda: "USD", saldo_resultante: -6015 },
+  { id: 16, entidad_id: 2, fecha: "2026-09-22T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 1000, moneda: "USD", saldo_resultante: -7015 },
+  { id: 17, entidad_id: 2, fecha: "2026-09-23T00:00:00.000Z", tipo: "PAGO_REALIZADO", concepto: "PAGO LUCAS", monto: 1100, moneda: "USD", saldo_resultante: -8115 },
 
   // Ema Haase
   { id: 7, entidad_id: 11, fecha: "2026-08-01T10:00:00.000Z", tipo: "ENTREGA_EQUIPO", concepto: "Entrega 16 Pro Max 256GB", monto: 1180, moneda: "USD", saldo_resultante: 1180 },
