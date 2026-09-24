@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS caja_movimientos (
   cotizacion NUMERIC(10,2) DEFAULT 1,
   persona_asociada VARCHAR(100),
   comprobante_ref VARCHAR(100),
+  entidad_id INTEGER REFERENCES entidades_cc(id) ON DELETE SET NULL, -- CC vinculada (opcional)
   observaciones TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -137,6 +138,7 @@ CREATE TABLE IF NOT EXISTS movimientos_cc (
   moneda VARCHAR(10) DEFAULT 'USD',
   saldo_resultante NUMERIC(14,2) DEFAULT 0,
   dispositivo_id INTEGER REFERENCES dispositivos(id) ON DELETE SET NULL,
+  caja_movimiento_id INTEGER, -- movimiento de caja que generó este movimiento CC (si viene de caja)
   observaciones TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

@@ -474,6 +474,17 @@ router.post('/cajas/movimientos', (req, res) => {
     }
   }
 
+  // Vínculo opcional con cuenta corriente: validar moneda
+  let entidadId = req.body.entidad_id ? parseInt(req.body.entidad_id) : null;
+  let entidad = null;
+  if (entidadId) {
+    entidad = (store.entidades_cc || []).find(en => en.id === entidadId) || null;
+    if (!entidad) return res.status(400).json({ error: 'Cuenta corriente no encontrada' });
+    if (entidad.moneda_principal !== cuenta.moneda) {
+      return res.status(400).json({ error: `La cuenta corriente de ${entidad.nombre} es en ${entidad.moneda_principal} y la caja es en ${cuenta.moneda}. No se puede vincular.` });
+    }
+  }
+
   const nuevoMov = {
     id: Date.now(),
     fecha: req.body.fecha || new Date().toISOString(),
@@ -487,14 +498,38 @@ router.post('/cajas/movimientos', (req, res) => {
     cotizacion: parseFloat(req.body.cotizacion) || 1,
     persona_asociada: req.body.persona_asociada || '',
     comprobante_ref: req.body.comprobante_ref || '',
+    entidad_id: entidadId,
     observaciones: req.body.observaciones || ''
   };
 
   store.caja_movimientos = store.caja_movimientos || [];
   store.caja_movimientos.push(nuevoMov);
+
+  // Si hay CC asociada: crear movimiento de cuenta corriente vinculado (PAGO/COBRO debita el saldo)
+  if (entidadId && entidad) {
+    const tipoCC = tipo === 'SALIDA' ? 'PAGO_REALIZADO' : 'COBRO_RECIBIDO';
+    const nuevoSaldo = (parseFloat(entidad.saldo_adeudado) || 0) - monto;
+    entidad.saldo_adeudado = nuevoSaldo;
+    const movCC = {
+      id: Date.now() + 1,
+      entidad_id: entidadId,
+      fecha: nuevoMov.fecha,
+      tipo: tipoCC,
+      concepto: nuevoMov.concepto || (tipoCC === 'PAGO_REALIZADO' ? 'Pago desde caja' : 'Cobro a la caja'),
+      monto: monto,
+      moneda: entidad.moneda_principal || cuenta.moneda,
+      saldo_resultante: nuevoSaldo,
+      caja_movimiento_id: nuevoMov.id,
+      observaciones: `Desde movimiento de caja #${nuevoMov.id} (${cuenta.nombre})`
+    };
+    store.movimientos_cc = store.movimientos_cc || [];
+    store.movimientos_cc.push(movCC);
+    nuevoMov.cc_movimiento_id = movCC.id;
+  }
+
   db.saveJsonStore();
 
-  res.json({ success: true, movimiento: nuevoMov, cuenta_actualizada: cuenta });
+  res.json({ success: true, movimiento: nuevoMov, cuenta_actualizada: cuenta, cc_movimiento_creado: !!(entidadId && entidad) });
 });
 
 router.put('/cajas/movimientos/:id', (req, res) => {
@@ -517,6 +552,69 @@ router.put('/cajas/movimientos/:id', (req, res) => {
     cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - deltaOriginal + deltaNuevo;
   }
 
+  // Vínculo CC
+  let nuevaEntidadId = (req.body.entidad_id !== undefined && req.body.entidad_id !== '' && req.body.entidad_id !== null) ? parseInt(req.body.entidad_id) : null;
+  const entidadOriginalId = movOriginal.entidad_id;
+
+  // Si se vincula una CC distinta a la original, validar moneda
+  if (nuevaEntidadId && nuevaEntidadId !== entidadOriginalId) {
+    const entNueva = (store.entidades_cc || []).find(en => en.id === nuevaEntidadId);
+    if (!entNueva) return res.status(400).json({ error: 'Cuenta corriente no encontrada' });
+    if (entNueva.moneda_principal !== cuenta.moneda) {
+      return res.status(400).json({ error: `La cuenta corriente de ${entNueva.nombre} es en ${entNueva.moneda_principal} y la caja es en ${cuenta.moneda}. No se puede vincular.` });
+    }
+  }
+
+  // 1) Si el movimiento tenía CC y ahora se desvincula o cambia: revertir saldo y borrar movimiento CC
+  if (entidadOriginalId && entidadOriginalId !== nuevaEntidadId) {
+    const mIdx = (store.movimientos_cc || []).findIndex(m => m.caja_movimiento_id === id && m.entidad_id === entidadOriginalId);
+    if (mIdx !== -1) {
+      const mCC = store.movimientos_cc[mIdx];
+      const entOrig = (store.entidades_cc || []).find(en => en.id === entidadOriginalId);
+      if (entOrig) entOrig.saldo_adeudado = (parseFloat(entOrig.saldo_adeudado) || 0) + (parseFloat(mCC.monto) || 0);
+      store.movimientos_cc.splice(mIdx, 1);
+    }
+  }
+
+  // 2) Mantener/crear el movimiento CC vinculado para la entidad final
+  if (nuevaEntidadId) {
+    const ent = (store.entidades_cc || []).find(en => en.id === nuevaEntidadId);
+    if (ent) {
+      const tipoCC = tipo === 'SALIDA' ? 'PAGO_REALIZADO' : 'COBRO_RECIBIDO';
+      const mIdx = (store.movimientos_cc || []).findIndex(m => m.caja_movimiento_id === id && m.entidad_id === nuevaEntidadId);
+      if (mIdx !== -1) {
+        // Actualizar el movimiento CC existente: ya se revirtió el saldo si cambio de CC o se está re-aplicando mismo lado
+        ent.saldo_adeudado = (parseFloat(ent.saldo_adeudado) || 0) - monto;
+        store.movimientos_cc[mIdx] = {
+          ...store.movimientos_cc[mIdx],
+          fecha: (req.body.fecha !== undefined && req.body.fecha !== '') ? req.body.fecha : store.movimientos_cc[mIdx].fecha,
+          tipo: tipoCC,
+          concepto: (req.body.concepto !== undefined ? req.body.concepto : store.movimientos_cc[mIdx].concepto) || (tipoCC === 'PAGO_REALIZADO' ? 'Pago desde caja' : 'Cobro a la caja'),
+          monto: monto,
+          saldo_resultante: ent.saldo_adeudado
+        };
+      } else if (entidadOriginalId !== nuevaEntidadId) {
+        // Crear nuevo movimiento CC (antes no vinculado)
+        const nuevoSaldo = (parseFloat(ent.saldo_adeudado) || 0) - monto;
+        ent.saldo_adeudado = nuevoSaldo;
+        const movCC = {
+          id: Date.now() + 1,
+          entidad_id: nuevaEntidadId,
+          fecha: (req.body.fecha !== undefined && req.body.fecha !== '') ? req.body.fecha : new Date().toISOString(),
+          tipo: tipoCC,
+          concepto: (req.body.concepto !== undefined ? req.body.concepto : movOriginal.concepto) || (tipoCC === 'PAGO_REALIZADO' ? 'Pago desde caja' : 'Cobro a la caja'),
+          monto: monto,
+          moneda: ent.moneda_principal || cuenta.moneda,
+          saldo_resultante: nuevoSaldo,
+          caja_movimiento_id: id,
+          observaciones: `Desde movimiento de caja #${id}`
+        };
+        store.movimientos_cc = store.movimientos_cc || [];
+        store.movimientos_cc.push(movCC);
+      }
+    }
+  }
+
   store.caja_movimientos[index] = {
     ...movOriginal,
     fecha: (req.body.fecha !== undefined && req.body.fecha !== '') ? req.body.fecha : (req.body.fecha === '' ? null : movOriginal.fecha),
@@ -530,6 +628,7 @@ router.put('/cajas/movimientos/:id', (req, res) => {
     cotizacion: (req.body.cotizacion !== undefined && req.body.cotizacion !== '') ? (parseFloat(req.body.cotizacion) || 1) : (parseFloat(movOriginal.cotizacion) || 1),
     persona_asociada: req.body.persona_asociada !== undefined ? req.body.persona_asociada : movOriginal.persona_asociada,
     comprobante_ref: req.body.comprobante_ref !== undefined ? req.body.comprobante_ref : movOriginal.comprobante_ref,
+    entidad_id: nuevaEntidadId,
     observaciones: req.body.observaciones !== undefined ? req.body.observaciones : movOriginal.observaciones
   };
   db.saveJsonStore();
@@ -547,6 +646,18 @@ router.delete('/cajas/movimientos/:id', (req, res) => {
   const cuenta = (store.cuentas_caja || []).find(c => c.id === mov.cuenta_id || c.nombre === mov.cuenta_nombre);
   if (cuenta && delta !== 0) {
     cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - delta;
+  }
+
+  // Si el movimiento estaba vinculado a una CC, revertir su saldo y borrar el movimiento CC
+  if (mov.entidad_id) {
+    const entidadId = parseInt(mov.entidad_id);
+    const mIdx = (store.movimientos_cc || []).findIndex(m => m.caja_movimiento_id === id && m.entidad_id === entidadId);
+    if (mIdx !== -1) {
+      const mCC = store.movimientos_cc[mIdx];
+      const ent = (store.entidades_cc || []).find(en => en.id === entidadId);
+      if (ent) ent.saldo_adeudado = (parseFloat(ent.saldo_adeudado) || 0) + (parseFloat(mCC.monto) || 0);
+      store.movimientos_cc.splice(mIdx, 1);
+    }
   }
 
   store.caja_movimientos.splice(index, 1);

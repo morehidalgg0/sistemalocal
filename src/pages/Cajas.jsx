@@ -17,6 +17,7 @@ export default function Cajas({ config, onDataChange }) {
 
   const [cajas, setCajas] = useState([]);
   const [movimientos, setMovimientos] = useState([]);
+  const [entidadesCC, setEntidadesCC] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('MOVIMIENTO'); // 'MOVIMIENTO' o 'CAMBIO_DIVISA'
@@ -38,6 +39,7 @@ export default function Cajas({ config, onDataChange }) {
     cotizacion: dolarCotiz,
     persona_asociada: '',
     comprobante_ref: '',
+    entidad_id: '',
     // Para cambio de divisas:
     cuenta_origen_id: '',
     cuenta_destino_id: '',
@@ -62,17 +64,19 @@ export default function Cajas({ config, onDataChange }) {
   const fetchCajasData = async () => {
     try {
       setLoading(true);
-      const [resCajas, resMovs] = await Promise.all([
+      const [resCajas, resMovs, resCC] = await Promise.all([
         fetch('/api/cajas').then(r => r.json()),
-        fetch('/api/cajas/movimientos').then(r => r.json())
+        fetch('/api/cajas/movimientos').then(r => r.json()),
+        fetch('/api/cuentas-corrientes').then(r => r.json()).catch(() => [])
       ]);
       setCajas(resCajas || []);
       setMovimientos(resMovs || []);
+      setEntidadesCC(resCC || []);
       if (resCajas && resCajas.length > 0 && !formData.cuenta_id) {
         setFormData(prev => ({ ...prev, cuenta_id: resCajas[0].id }));
       }
     } catch (err) {
-      console.warn("Using fallback cajas:", err); setCajas(fallbackData.cuentas_caja || []); setMovimientos(fallbackData.caja_movimientos || []);
+      console.warn("Using fallback cajas:", err); setCajas(fallbackData.cuentas_caja || []); setMovimientos(fallbackData.caja_movimientos || []); setEntidadesCC([]);
     } finally {
       setLoading(false);
     }
@@ -121,7 +125,8 @@ export default function Cajas({ config, onDataChange }) {
           monto: parseFloat(formData.monto) || 0,
           cotizacion: parseFloat(formData.cotizacion) || dolarCotiz,
           persona_asociada: formData.persona_asociada,
-          comprobante_ref: formData.comprobante_ref
+          comprobante_ref: formData.comprobante_ref,
+          entidad_id: formData.entidad_id || null
         };
 
         const res = await fetch('/api/cajas/movimientos', {
@@ -154,6 +159,7 @@ export default function Cajas({ config, onDataChange }) {
       cotizacion: parseFloat(m.cotizacion) || dolarCotiz,
       persona_asociada: m.persona_asociada || '',
       comprobante_ref: m.comprobante_ref || '',
+      entidad_id: m.entidad_id ? String(m.entidad_id) : '',
       cuenta_origen_id: '',
       cuenta_destino_id: '',
       monto_usd_comprado: '',
@@ -192,7 +198,8 @@ export default function Cajas({ config, onDataChange }) {
           monto: parseFloat(formData.monto) || 0,
           cotizacion: parseFloat(formData.cotizacion) || dolarCotiz,
           persona_asociada: formData.persona_asociada,
-          comprobante_ref: formData.comprobante_ref
+          comprobante_ref: formData.comprobante_ref,
+          entidad_id: formData.entidad_id || null
         };
         const res = await fetch(`/api/cajas/movimientos/${editandoMovimiento.id}`, {
           method: 'PUT',
@@ -439,6 +446,11 @@ export default function Cajas({ config, onDataChange }) {
                       </td>
                       <td className="py-3 px-4 text-slate-300">
                         {m.concepto}
+                        {m.entidad_id && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-500/10 text-sky-400 border border-sky-500/30 whitespace-nowrap">
+                            CC: {entidadesCC.find(en => en.id === m.entidad_id)?.nombre || `#${m.entidad_id}`}
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-slate-400 text-xs">
                         {m.persona_asociada || '-'}
@@ -681,6 +693,25 @@ export default function Cajas({ config, onDataChange }) {
                       placeholder="ej. Fran / Eze / Lucas"
                       className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Cuenta Corriente (Opcional)</label>
+                    <select
+                      value={formData.entidad_id || ''}
+                      onChange={e => setFormData({ ...formData, entidad_id: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
+                    >
+                      <option value="">— Sin cuenta corriente —</option>
+                      {entidadesCC
+                        .filter(en => !formData.cuenta_id || (cajas.find(cc => String(cc.id) === String(formData.cuenta_id))?.moneda || 'USD') === en.moneda_principal)
+                        .map(en => (
+                          <option key={en.id} value={en.id}>{en.nombre} ({en.tipo}) · Saldo ${en.saldo_adeudado ?? 0} {en.moneda_principal}</option>
+                        ))}
+                    </select>
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Si elegís una cuenta corriente, el movimiento se registra también en esa CC (PAGO en salidas / COBRO en entradas).
+                    </p>
                   </div>
                 </>
               )}
