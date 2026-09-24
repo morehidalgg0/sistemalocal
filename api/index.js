@@ -73,6 +73,33 @@ function numericize(row) {
   return out;
 }
 
+// Resumen del mes actual: ventas por vendedor (NP/MARDEL), equipos vendidos y pesos vendidos.
+function resumenVentasVendedor(ventas, dolar) {
+  const now = new Date();
+  const mesKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const delMes = (ventas || []).filter(v => {
+    const d = v.fecha ? new Date(v.fecha) : null;
+    if (!d || isNaN(d.getTime())) return false;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === mesKey;
+  });
+  const porVendedor = {};
+  let pesosVendidos = 0;
+  delMes.forEach(v => {
+    let vendedor = (v.vendedor_nombre || "NP").trim();
+    if (vendedor.toUpperCase() === "MARDEL") vendedor = "MARDEL";
+    porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
+    const usd = parseFloat(v.precio_venta_usd) || 0;
+    const ars = parseFloat(v.precio_venta_pesos) || 0;
+    pesosVendidos += usd > 0 ? (usd * (parseFloat(v.cotizacion_dolar) || dolar)) : ars;
+  });
+  const total = delMes.length;
+  const np = porVendedor["NP"] || 0;
+  const mardel = porVendedor["MARDEL"] || 0;
+  const otros = total - np - mardel;
+  const pct = n => (total > 0 ? Math.round((n / total) * 100) : 0);
+  return { mes: mesKey, np, mardel, otros, pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros), equiposVendidos: total, pesosVendidos };
+}
+
 // Ajusta la ganancia de ventas que tienen accesorios bonificados (regalo_componentes):
 // usa el costo ACTUAL de esos accesorios en el stock, no el valor congelado al momento de vender.
 async function recomponerGananciaRegalos(rows) {
@@ -430,6 +457,7 @@ const ventasRaw = await q("SELECT * FROM ventas");
       equiposEnStock: parseInt(dispEnStock.rows[0].c),
       reparacionesActivas: parseInt(repActivas.rows[0].c),
       entidadesCC: entidadesCCRaw.rows.map(numericize),
+      ventasVendedor: resumenVentasVendedor(ventas, dolar),
       ultimasVentas: await recomponerGananciaRegalos(ultimasVentas.rows.map(numericize)),
       ultimosMovimientos: ultimosMovs.rows.map(numericize)
     });
@@ -481,6 +509,7 @@ const ventasRaw = await q("SELECT * FROM ventas");
       equiposEnStock: (memStore.dispositivos || []).filter(d => d.estado === "En Stock").length,
       reparacionesActivas: (memStore.reparaciones || []).filter(r => r.estado !== "Entregado y Cobrado").length,
       entidadesCC: (memStore.entidades_cc || []).slice().sort((a, b) => (parseFloat(b.saldo_adeudado) || 0) - (parseFloat(a.saldo_adeudado) || 0)),
+      ventasVendedor: resumenVentasVendedor(ventas, dolar),
       ultimasVentas: ventas.slice(-5).reverse(),
       ultimosMovimientos: (memStore.caja_movimientos || []).slice(-6).reverse()
     });

@@ -97,6 +97,32 @@ router.post('/dolar/refresh', async (req, res) => {
   }
 });
 
+function resumenVentasVendedor(ventas, dolar) {
+  const now = new Date();
+  const mesKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const delMes = (ventas || []).filter(v => {
+    const d = v.fecha ? new Date(v.fecha) : null;
+    if (!d || isNaN(d.getTime())) return false;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}` === mesKey;
+  });
+  const porVendedor = {};
+  let pesosVendidos = 0;
+  delMes.forEach(v => {
+    let vendedor = (v.vendedor_nombre || "NP").trim();
+    if (vendedor.toUpperCase() === "MARDEL") vendedor = "MARDEL";
+    porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
+    const usd = parseFloat(v.precio_venta_usd) || 0;
+    const ars = parseFloat(v.precio_venta_pesos) || 0;
+    pesosVendidos += usd > 0 ? (usd * (parseFloat(v.cotizacion_dolar) || dolar)) : ars;
+  });
+  const total = delMes.length;
+  const np = porVendedor["NP"] || 0;
+  const mardel = porVendedor["MARDEL"] || 0;
+  const otros = total - np - mardel;
+  const pct = n => (total > 0 ? Math.round((n / total) * 100) : 0);
+  return { mes: mesKey, np, mardel, otros, pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros), equiposVendidos: total, pesosVendidos };
+}
+
 // ----------------------------------------------------
 // 2. DASHBOARD RESUMEN EJECUTIVO (KPIs)
 // ----------------------------------------------------
@@ -164,6 +190,7 @@ router.get('/dashboard', (req, res) => {
     equiposEnStock: (store.dispositivos || []).filter(d => d.estado === 'En Stock').length,
     reparacionesActivas: (store.reparaciones || []).filter(r => r.estado !== 'Entregado y Cobrado').length,
     entidadesCC: (store.entidades_cc || []).slice().sort((a, b) => (parseFloat(b.saldo_adeudado) || 0) - (parseFloat(a.saldo_adeudado) || 0)),
+    ventasVendedor: resumenVentasVendedor(ventas, dolar),
     ultimasVentas: (store.ventas || []).slice(-5).reverse(),
     ultimosMovimientos: (store.caja_movimientos || []).slice(-6).reverse()
   });

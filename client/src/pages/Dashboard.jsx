@@ -9,7 +9,7 @@ import {
   ArrowDownRight, 
   Users, 
   CreditCard,
-  AlertCircle
+  PieChart
 } from 'lucide-react';
 
 export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
@@ -268,22 +268,90 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
             </button>
           </div>
 
-          {/* Estado de Gastos Fijos del Mes */}
+          {/* Acceso directo: Ventas por Vendedor del mes */}
           <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-2xl">
             <h2 className="text-base font-bold text-white mb-2 flex items-center gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-400" />
-              Gastos del Mes
+              <PieChart className="w-5 h-5 text-sky-400" />
+              Ventas por Vendedor
             </h2>
-            <p className="text-xs text-slate-400 mb-3">Control de alquileres, sueldos y servicios del local.</p>
+            <p className="text-xs text-slate-400 mb-3">
+              {data?.ventasVendedor ? `Resumen del mes actual (${data.ventasVendedor.mes}).` : 'Resumen del mes actual.'}
+            </p>
+            <div className="flex items-center gap-4">
+              <div className="relative w-24 h-24 shrink-0">
+                <Donut np={data?.ventasVendedor?.np || 0} mardel={data?.ventasVendedor?.mardel || 0} otros={data?.ventasVendedor?.otros || 0} />
+                <div className="absolute inset-0 flex items-center justify-center flex-col">
+                  <span className="text-lg font-bold text-white leading-none">{data?.ventasVendedor?.equiposVendidos || 0}</span>
+                  <span className="text-[9px] text-slate-400 leading-tight mt-0.5">equipos</span>
+                </div>
+              </div>
+              <div className="flex-1 space-y-1.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" />
+                    NP
+                  </span>
+                  <span className="font-bold text-white">{data?.ventasVendedor?.np || 0} <span className="text-slate-400 font-normal">({data?.ventasVendedor?.pctNP || 0}%)</span></span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 text-slate-300">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                    MARDEL
+                  </span>
+                  <span className="font-bold text-white">{data?.ventasVendedor?.mardel || 0} <span className="text-slate-400 font-normal">({data?.ventasVendedor?.pctMardel || 0}%)</span></span>
+                </div>
+                <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
+                  <span className="text-slate-400">Pesos vendidos</span>
+                  <span className="font-bold text-emerald-400">${(data?.ventasVendedor?.pesosVendidos || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
+                </div>
+              </div>
+            </div>
             <button 
-              onClick={() => onNavigate('gastos')}
-              className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition"
+              onClick={() => onNavigate('ventas')}
+              className="w-full mt-3 py-2 text-xs font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 rounded-xl transition text-center"
             >
-              Gestionar Gastos Fijos e Inversiones
+              Ver detalle en Ventas →
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function Donut({ np, mardel, otros }) {
+  const total = np + mardel + otros;
+  if (total === 0) {
+    return (
+      <svg viewBox="0 0 42 42" className="w-full h-full -rotate-90">
+        <circle cx="21" cy="21" r="15.915" fill="none" stroke="#334155" strokeWidth="5" />
+      </svg>
+    );
+  }
+  const R = 15.915;
+  const C = 2 * Math.PI * R;
+  const segs = [];
+  let offset = 0;
+  const add = (value, color) => {
+    if (value <= 0) return;
+    segs.push(
+      <circle
+        key={color}
+        cx="21" cy="21" r={R} fill="none"
+        stroke={color} strokeWidth="5"
+        strokeDasharray={`${(value / total) * C} ${C}`}
+        strokeDashoffset={-offset}
+      />
+    );
+    offset += (value / total) * C;
+  };
+  add(np, "#38bdf8");
+  add(mardel, "#34d399");
+  add(otros, "#64748b");
+  return (
+    <svg viewBox="0 0 42 42" className="w-full h-full -rotate-90">
+      <circle cx="21" cy="21" r={R} fill="none" stroke="#1e293b" strokeWidth="5" />
+      {segs}
+    </svg>
   );
 }
