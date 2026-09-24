@@ -6,6 +6,14 @@ export default function Ventas({ config, onDataChange }) {
   const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
   const keyMes = (f) => { const d = f ? new Date(f) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
   const labelMes = (k) => { const [y, m] = String(k || '').split('-'); const nombre = MESES_NOMBRES[parseInt(m, 10) - 1] || k; return String(y) === String(new Date().getFullYear()) ? nombre : `${nombre} ${y}`; };
+  const fmtFecha = (iso) => {
+    if (!iso) return '-';
+    if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T00:00:00/.test(iso)) {
+      const [y, mo, d] = iso.slice(0, 10).split('-');
+      return `${d}/${mo}/${y}`;
+    }
+    try { return new Date(iso).toLocaleDateString('es-AR'); } catch { return String(iso || '-'); }
+  };
 
   const [ventas, setVentas] = useState([]);
   const [mesSeleccionado, setMesSeleccionado] = useState(null);
@@ -478,7 +486,7 @@ setShowModal(true);
                 {ventasMes.map((v) => (
                   <tr key={v.id} className="hover:bg-slate-800/40 transition">
                     <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
-                      {new Date(v.fecha).toLocaleDateString('es-AR')}
+                      {fmtFecha(v.fecha)}
                     </td>
                     <td className="py-3 px-4 font-medium text-white">
                       <div className="flex items-center gap-1.5">
@@ -567,7 +575,7 @@ setShowModal(true);
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {editandoVenta
-                    ? `Modificando la venta del ${editandoVenta.fecha ? new Date(editandoVenta.fecha).toLocaleDateString('es-AR') : '-'}. Guardá los cambios y se recalcula la ganancia y la caja destino.`
+                    ? `Modificando la venta del ${editandoVenta.fecha ? fmtFecha(editandoVenta.fecha) : '-'}. Guardá los cambios y se recalcula la ganancia y la caja destino.`
                     : 'Selecciona el dispositivo exacto de tu stock para descontarlo y cargar sus costos automáticamente.'}
                 </p>
               </div>

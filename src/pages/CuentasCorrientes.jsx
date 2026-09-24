@@ -3,6 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2, Smartphone, Search } from 'lucide-react';
 
 export default function CuentasCorrientes({ config, onDataChange }) {
+  const fmtFecha = (iso) => {
+    if (!iso) return '—';
+    if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T00:00:00/.test(iso)) {
+      const [y, mo, d] = iso.slice(0, 10).split('-');
+      return `${d}/${mo}/${y}`;
+    }
+    try { return new Date(iso).toLocaleDateString('es-AR'); } catch { return String(iso || '—'); }
+  };
   const [entidades, setEntidades] = useState([]);
   const [selectedEntidad, setSelectedEntidad] = useState(null);
   const [movimientos, setMovimientos] = useState([]);
@@ -393,7 +401,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                             </div>
                             <div className="min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-[11px] text-slate-500">{m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '—'}</span>
+                                <span className="text-[11px] text-slate-500">{fmtFecha(m.fecha)}</span>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${iconStyle}`}>
                                   {esEquipo ? 'Entrega de Equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
                                 </span>
