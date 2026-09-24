@@ -41,15 +41,33 @@ const Donut = ({ npPct, mardelPct, otrosPct }) => {
 
 export default function Ventas({ config, onDataChange }) {
   const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
-  const keyMes = (f) => { const d = f ? new Date(f) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+  const keyMes = (f) => {
+    if (typeof f === 'string' && /^\d{4}-\d{2}-\d{2}/.test(f)) return f.slice(0, 7);
+    const d = f ? new Date(f) : new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
   const labelMes = (k) => { const [y, m] = String(k || '').split('-'); const nombre = MESES_NOMBRES[parseInt(m, 10) - 1] || k; return String(y) === String(new Date().getFullYear()) ? nombre : `${nombre} ${y}`; };
-  const fmtFecha = (iso) => {
+const fmtFecha = (iso) => {
     if (!iso) return '-';
-    if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}T00:00:00/.test(iso)) {
+    if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}/.test(iso)) {
       const [y, mo, d] = iso.slice(0, 10).split('-');
       return `${d}/${mo}/${y}`;
     }
     try { return new Date(iso).toLocaleDateString('es-AR'); } catch { return String(iso || '-'); }
+  };
+
+  const hoyInput = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Convierte una fecha ISO/string en valor yyyy-MM-dd (para <input type="date">)
+  const toInputDate = (iso) => {
+    if (!iso) return '';
+    const s = String(iso);
+    const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    try { return new Date(iso).toISOString().slice(0, 10); } catch { return ''; }
   };
 
   const [ventas, setVentas] = useState([]);
@@ -101,6 +119,7 @@ export default function Ventas({ config, onDataChange }) {
 
   // Form State
   const [formData, setFormData] = useState({
+    fecha: hoyInput(),
     dispositivo_id: '',
     dispositivo_seleccionado: null,
     item_detalle: '',
@@ -233,6 +252,7 @@ export default function Ventas({ config, onDataChange }) {
     const label = v.descuentos_regalos_detalle || '';
     setModoRegalo(label || 'custom');
     setFormData({
+      fecha: toInputDate(v.fecha) || hoyInput(),
       dispositivo_id: v.dispositivo_id || '',
       dispositivo_seleccionado: null,
       item_detalle: v.item_detalle || '',
@@ -372,6 +392,7 @@ setShowModal(true);
         setPagos([]);
         // Reset form
         setFormData({
+          fecha: hoyInput(),
           dispositivo_id: '',
           dispositivo_seleccionado: null,
           item_detalle: '',
@@ -880,6 +901,19 @@ setShowModal(true);
 
               {/* Datos del Cliente y Vendedor */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Fecha de la venta
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.fecha || hoyInput()}
+                    onChange={e => setFormData({ ...formData, fecha: e.target.value })}
+                    title="Hoy por defecto. Podés cambiarla manualmente."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:border-sky-500 [color-scheme:dark]"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
                     Cliente *

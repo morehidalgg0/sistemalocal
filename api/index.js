@@ -727,6 +727,7 @@ app.put("/api/ventas/:id", async (req, res) => {
 
   const updated = {
     ...old,
+    fecha: (b.fecha && String(b.fecha).trim()) ? b.fecha : old.fecha,
     item_detalle: b.item_detalle ?? old.item_detalle,
     cliente_nombre: b.cliente_nombre ?? old.cliente_nombre,
     cliente_contacto: b.cliente_contacto ?? old.cliente_contacto,
@@ -770,8 +771,8 @@ app.put("/api/ventas/:id", async (req, res) => {
         await revertirDesglosePG("VENTA-#" + id, old.item_detalle, old.caja_destino);
         // 2) Actualizar la venta en PG (o insertarla si no existía)
         const upd = await q(
-          `UPDATE ventas SET item_detalle=$1, cliente_nombre=$2, cliente_contacto=$3, vendedor_nombre=$4, precio_venta_usd=$5, precio_venta_pesos=$6, cotizacion_dolar=$7, costo_total_usd=$8, costo_total_pesos=$9, costo_reparacion=$10, descuentos_regalos_detalle=$11, descuento_monto=$12, regalo_componentes=$13, regalo_costo_snapshot_usd=$14, ganancia_usd=$15, ganancia_pesos=$16, comision_vendedor_pesos=$17, comision_vendedor_usd=$18, comision_se_pago=$19, entrega=$20, metodo_pago=$21, caja_destino=$22, desglose_pago=$23, observaciones=$24 WHERE id=$25`,
-          [updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.comision_se_pago || false, updated.entrega || false, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.desglose_pago || null, updated.observaciones || "", parseInt(id)]
+          `UPDATE ventas SET fecha=$1, item_detalle=$2, cliente_nombre=$3, cliente_contacto=$4, vendedor_nombre=$5, precio_venta_usd=$6, precio_venta_pesos=$7, cotizacion_dolar=$8, costo_total_usd=$9, costo_total_pesos=$10, costo_reparacion=$11, descuentos_regalos_detalle=$12, descuento_monto=$13, regalo_componentes=$14, regalo_costo_snapshot_usd=$15, ganancia_usd=$16, ganancia_pesos=$17, comision_vendedor_pesos=$18, comision_vendedor_usd=$19, comision_se_pago=$20, entrega=$21, metodo_pago=$22, caja_destino=$23, desglose_pago=$24, observaciones=$25 WHERE id=$26`,
+          [updated.fecha, updated.item_detalle, updated.cliente_nombre, updated.cliente_contacto, updated.vendedor_nombre, updated.precio_venta_usd, updated.precio_venta_pesos, updated.cotizacion_dolar, updated.costo_total_usd, updated.costo_total_pesos, updated.costo_reparacion, updated.descuentos_regalos_detalle || "", updated.descuento_monto, updated.regalo_componentes || null, updated.regalo_costo_snapshot_usd || 0, updated.ganancia_usd, updated.ganancia_pesos, updated.comision_vendedor_pesos, updated.comision_vendedor_usd, updated.comision_se_pago || false, updated.entrega || false, updated.metodo_pago || "Efectivo USD", updated.caja_destino || "Caja Dólares", updated.desglose_pago || null, updated.observaciones || "", parseInt(id)]
         );
         if (upd.rowCount === 0) {
           await persistVentaPG(updated, b.impactar_caja);

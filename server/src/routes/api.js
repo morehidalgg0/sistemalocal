@@ -411,6 +411,7 @@ router.put('/ventas/:id', (req, res) => {
 
   const ventaActualizada = {
     ...ventaOriginal,
+    fecha: (req.body.fecha && String(req.body.fecha).trim()) ? req.body.fecha : ventaOriginal.fecha,
     item_detalle: req.body.item_detalle ?? ventaOriginal.item_detalle,
     cliente_nombre: req.body.cliente_nombre ?? ventaOriginal.cliente_nombre,
     cliente_contacto: req.body.cliente_contacto ?? ventaOriginal.cliente_contacto,
