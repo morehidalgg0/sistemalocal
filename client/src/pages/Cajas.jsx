@@ -395,6 +395,7 @@ export default function Cajas({ config, onDataChange }) {
             <option value="TODOS">Entradas y salidas</option>
             <option value="ENTRADA">Solo entradas</option>
             <option value="SALIDA">Solo salidas</option>
+            <option value="BALANCE">Solo balances</option>
           </select>
           <select
             value={ordenMov}
@@ -431,6 +432,7 @@ export default function Cajas({ config, onDataChange }) {
               <tbody className="divide-y divide-slate-800">
                 {movimientosFiltrados.map((m) => {
                 const isEntrada = m.tipo_movimiento === 'ENTRADA' || m.tipo_movimiento === 'CAMBIO_DIVISA';
+                const isBalance = m.tipo_movimiento === 'BALANCE';
                   return (
                     <tr key={m.id} className="hover:bg-slate-800/40 transition">
                       <td className="py-3 px-4 text-slate-400 whitespace-nowrap">
@@ -455,8 +457,8 @@ export default function Cajas({ config, onDataChange }) {
                       <td className="py-3 px-4 text-slate-400 text-xs">
                         {m.persona_asociada || '-'}
                       </td>
-                      <td className={`py-3 px-4 text-right font-bold font-mono ${isEntrada ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {isEntrada ? '+' : '-'}${m.monto?.toLocaleString('es-AR')} {m.moneda}
+                      <td className={`py-3 px-4 text-right font-bold font-mono ${isEntrada ? 'text-emerald-400' : (isBalance ? 'text-amber-400' : 'text-rose-400')}`}>
+                        {isBalance ? '=' : (isEntrada ? '+' : '-')}${m.monto?.toLocaleString('es-AR')} {m.moneda}
                       </td>
                       <td className="py-3 px-4 text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -623,6 +625,7 @@ export default function Cajas({ config, onDataChange }) {
                       >
                         <option value="ENTRADA">🟢 ENTRADA (Ingreso)</option>
                         <option value="SALIDA">🔴 SALIDA (Egreso / Pago)</option>
+                        <option value="BALANCE">⚖️ BALANCE (Ajuste de saldo)</option>
                       </select>
                     </div>
 
@@ -659,7 +662,7 @@ export default function Cajas({ config, onDataChange }) {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">Monto *</label>
+                      <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">{formData.tipo_movimiento === 'BALANCE' ? 'Nuevo Saldo *' : 'Monto *'}</label>
                       <input
                         type="number"
                         step="any"

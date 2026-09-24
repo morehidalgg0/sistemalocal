@@ -32,6 +32,7 @@ async function getPool() {
       const client = await pool.connect();
       client.release();
       isPostgresAvailable = true;
+      pool.query("ALTER TABLE caja_movimientos ADD COLUMN IF NOT EXISTS saldo_anterior NUMERIC").catch(() => {});
     } catch (e) {
       console.warn("PostgreSQL connection failed, using in-memory store:", e.message);
       pool = null;
@@ -869,8 +870,10 @@ app.post("/api/cajas/movimientos", async (req, res) => {
   if (cIdx === -1) return res.status(400).json({ error: "Caja no encontrada" });
   const c = memStore.cuentas_caja[cIdx];
   const monto = parseFloat(b.monto) || 0;
-  if (b.tipo_movimiento === "ENTRADA") c.saldo_actual = (parseFloat(c.saldo_actual) || 0) + monto;
-  else if (b.tipo_movimiento === "SALIDA") c.saldo_actual = (parseFloat(c.saldo_actual) || 0) - monto;
+  const saldoAnterior = parseFloat(c.saldo_actual) || 0;
+  if (b.tipo_movimiento === "BALANCE") c.saldo_actual = monto;
+  else if (b.tipo_movimiento === "ENTRADA") c.saldo_actual = saldoAnterior + monto;
+  else if (b.tipo_movimiento === "SALIDA") c.saldo_actual = saldoAnterior - monto;
 
   // Vínculo opcional con cuenta corriente: validar moneda
   let entidadId = b.entidad_id ? parseInt(b.entidad_id) : null;
@@ -903,6 +906,7 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     monto: monto,
     moneda: c.moneda,
     cotizacion: parseFloat(b.cotizacion) || 1,
+    saldo_anterior: b.tipo_movimiento === "BALANCE" ? saldoAnterior : null,
     persona_asociada: b.persona_asociada || "",
     comprobante_ref: b.comprobante_ref || "",
     entidad_id: entidadId,
@@ -915,12 +919,12 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     await getPool();
     if (isPostgresAvailable) {
       try {
-        const cols = "fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, persona_asociada, comprobante_ref, entidad_id";
-        const vals = [newMov.fecha, newMov.cuenta_id, newMov.cuenta_nombre, newMov.tipo_movimiento, newMov.categoria, newMov.concepto, newMov.monto, newMov.moneda, newMov.cotizacion, newMov.persona_asociada, newMov.comprobante_ref || "", entidadId];
+        const cols = "fecha, cuenta_id, cuenta_nombre, tipo_movimiento, categoria, concepto, monto, moneda, cotizacion, saldo_anterior, persona_asociada, comprobante_ref, entidad_id";
+        const vals = [newMov.fecha, newMov.cuenta_id, newMov.cuenta_nombre, newMov.tipo_movimiento, newMov.categoria, newMov.concepto, newMov.monto, newMov.moneda, newMov.cotizacion, newMov.saldo_anterior, newMov.persona_asociada, newMov.comprobante_ref || "", entidadId];
         const ph = vals.map((_, i) => "$" + (i + 1)).join(", ");
         const r = await q(`INSERT INTO caja_movimientos (${cols}) VALUES (${ph}) RETURNING id`, vals);
         if (r.rows && r.rows[0]) newMov.id = r.rows[0].id;
-        const delta = b.tipo_movimiento === "ENTRADA" ? monto : (b.tipo_movimiento === "SALIDA" ? -monto : 0);
+        const delta = b.tipo_movimiento === "ENTRADA" ? monto : (b.tipo_movimiento === "SALIDA" ? -monto : (b.tipo_movimiento === "BALANCE" ? (monto - saldoAnterior) : 0));
         if (delta !== 0) {
           await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [delta, c.id]).catch(() => {});
         }
@@ -1060,6 +1064,7 @@ app.put("/api/cajas/movimientos/:id", async (req, res) => {
     monto: monto,
     moneda: b.moneda || (cuenta ? cuenta.moneda : mov.moneda),
     cotizacion: (b.cotizacion !== undefined && b.cotizacion !== "") ? (parseFloat(b.cotizacion) || 1) : (parseFloat(mov.cotizacion) || 1),
+    saldo_anterior: tipo === "BALANCE" ? (parseFloat(mov.saldo_anterior) || (parseFloat(mov.monto) || 0)) : null,
     persona_asociada: b.persona_asociada !== undefined ? b.persona_asociada : mov.persona_asociada,
     comprobante_ref: b.comprobante_ref !== undefined ? b.comprobante_ref : mov.comprobante_ref,
     entidad_id: nuevaEntidadId
@@ -1230,13 +1235,31 @@ app.put("/api/cajas/movimientos/:id", async (req, res) => {
       try {
         // Ajustar el saldo de la caja correspondiente al movimiento
         if (cuenta) {
-          const ajuste = deltaNuevo - deltaOriginal;
-          if (mov.cuenta_id === cuentaId && ajuste !== 0) {
-            await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [ajuste, cuentaId]).catch(() => {});
+          const esOriginalBalance = mov.tipo_movimiento === "BALANCE";
+          const esNuevoBalance = tipo === "BALANCE";
+          if (esNuevoBalance || esOriginalBalance) {
+            // Para balances: restaurar el estado previo (o revertir el movimiento original) y aplicar el nuevo
+            let saldoActual;
+            try {
+              const rSal = await q("SELECT COALESCE(saldo_actual,0) as s FROM cuentas_caja WHERE id=$1", [cuentaId]);
+              saldoActual = parseFloat(rSal.rows[0].s) || 0;
+            } catch (e) { saldoActual = parseFloat(cuenta.saldo_actual) || 0; }
+            const base = esOriginalBalance
+              ? ((mov.saldo_anterior != null && mov.saldo_anterior !== undefined) ? parseFloat(mov.saldo_anterior) : (saldoActual - deltaOriginal))
+              : (saldoActual - deltaOriginal);
+            const nuevoSaldo = esNuevoBalance ? monto : (base + deltaNuevo);
+            const cMemIdx2 = (memStore.cuentas_caja || []).findIndex(c => c.id === cuentaId);
+            if (cMemIdx2 !== -1) memStore.cuentas_caja[cMemIdx2].saldo_actual = nuevoSaldo;
+            await q("UPDATE cuentas_caja SET saldo_actual=$1 WHERE id=$2", [nuevoSaldo, cuentaId]).catch(() => {});
+          } else {
+            const ajuste = deltaNuevo - deltaOriginal;
+            if (mov.cuenta_id === cuentaId && ajuste !== 0) {
+              await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) + $1 WHERE id=$2", [ajuste, cuentaId]).catch(() => {});
+            }
           }
         }
-        await q("UPDATE caja_movimientos SET fecha=$1, cuenta_id=$2, cuenta_nombre=$3, tipo_movimiento=$4, categoria=$5, concepto=$6, monto=$7, moneda=$8, cotizacion=$9, persona_asociada=$10, comprobante_ref=$11, entidad_id=$12 WHERE id=$13",
-          [updated.fecha, updated.cuenta_id, updated.cuenta_nombre, updated.tipo_movimiento, updated.categoria || "Varios", updated.concepto || "", updated.monto, updated.moneda, updated.cotizacion, updated.persona_asociada || "", updated.comprobante_ref || "", updated.entidad_id, id]).catch(() => {});
+        await q("UPDATE caja_movimientos SET fecha=$1, cuenta_id=$2, cuenta_nombre=$3, tipo_movimiento=$4, categoria=$5, concepto=$6, monto=$7, moneda=$8, cotizacion=$9, saldo_anterior=$10, persona_asociada=$11, comprobante_ref=$12, entidad_id=$13 WHERE id=$14",
+          [updated.fecha, updated.cuenta_id, updated.cuenta_nombre, updated.tipo_movimiento, updated.categoria || "Varios", updated.concepto || "", updated.monto, updated.moneda, updated.cotizacion, updated.saldo_anterior, updated.persona_asociada || "", updated.comprobante_ref || "", updated.entidad_id, id]).catch(() => {});
       } catch (e) {
         console.warn("PUT caja movimiento -> PG error:", e.message);
       }
@@ -1322,15 +1345,24 @@ app.delete("/api/cajas/movimientos/:id", async (req, res) => {
   const memIdx = (memStore.caja_movimientos || []).findIndex(m => m.id === id);
   if (memIdx !== -1) memStore.caja_movimientos.splice(memIdx, 1);
   const cMemIdx = (memStore.cuentas_caja || []).findIndex(c => c.id === mov.cuenta_id);
-  if (cMemIdx !== -1 && delta !== 0) {
-    memStore.cuentas_caja[cMemIdx].saldo_actual = (parseFloat(memStore.cuentas_caja[cMemIdx].saldo_actual) || 0) - delta;
+  if (cMemIdx !== -1) {
+    if (mov.tipo_movimiento === "BALANCE") {
+      memStore.cuentas_caja[cMemIdx].saldo_actual = (mov.saldo_anterior !== null && mov.saldo_anterior !== undefined) ? parseFloat(mov.saldo_anterior) : (parseFloat(memStore.cuentas_caja[cMemIdx].saldo_actual) || 0);
+    } else if (delta !== 0) {
+      memStore.cuentas_caja[cMemIdx].saldo_actual = (parseFloat(memStore.cuentas_caja[cMemIdx].saldo_actual) || 0) - delta;
+    }
   }
 
   if (process.env.DATABASE_URL) {
     await getPool();
     if (isPostgresAvailable) {
       try {
-        if (delta !== 0) {
+        if (mov.tipo_movimiento === "BALANCE") {
+          const saldoRestaurado = (mov.saldo_anterior !== null && mov.saldo_anterior !== undefined) ? parseFloat(mov.saldo_anterior) : null;
+          if (saldoRestaurado !== null) {
+            await q("UPDATE cuentas_caja SET saldo_actual=$1 WHERE id=$2", [saldoRestaurado, mov.cuenta_id]).catch(() => {});
+          }
+        } else if (delta !== 0) {
           await q("UPDATE cuentas_caja SET saldo_actual = COALESCE(saldo_actual, 0) - $1 WHERE id=$2", [delta, mov.cuenta_id]).catch(() => {});
         }
         await q("DELETE FROM caja_movimientos WHERE id=$1", [id]).catch(() => {});

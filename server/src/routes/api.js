@@ -487,11 +487,15 @@ router.post('/cajas/movimientos', (req, res) => {
 
   const monto = parseFloat(req.body.monto) || 0;
   const tipo = req.body.tipo_movimiento;
+  const saldoPrevio = parseFloat(cuenta.saldo_actual) || 0;
 
   if (tipo === 'ENTRADA') {
-    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) + monto;
+    cuenta.saldo_actual = saldoPrevio + monto;
   } else if (tipo === 'SALIDA') {
-    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - monto;
+    cuenta.saldo_actual = saldoPrevio - monto;
+  } else if (tipo === 'BALANCE') {
+    // Ajuste de saldo (conteo físico): el monto cargado pasa a ser el nuevo saldo de la caja
+    cuenta.saldo_actual = monto;
   } else if (tipo === 'CAMBIO_DIVISA') {
     cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) + monto;
     if (req.body.cuenta_origen_id) {
@@ -525,6 +529,7 @@ router.post('/cajas/movimientos', (req, res) => {
     monto: monto,
     moneda: cuenta.moneda,
     cotizacion: parseFloat(req.body.cotizacion) || 1,
+    saldo_anterior: tipo === 'BALANCE' ? saldoPrevio : null,
     persona_asociada: req.body.persona_asociada || '',
     comprobante_ref: req.body.comprobante_ref || '',
     entidad_id: entidadId,
@@ -573,12 +578,21 @@ router.put('/cajas/movimientos/:id', (req, res) => {
 
   const tipo = req.body.tipo_movimiento || movOriginal.tipo_movimiento;
   const monto = (req.body.monto !== undefined && req.body.monto !== '') ? (parseFloat(req.body.monto) || 0) : (parseFloat(movOriginal.monto) || 0);
+  const saldoPrevio = parseFloat(cuenta.saldo_actual) || 0;
 
   const deltaOriginal = movOriginal.tipo_movimiento === 'ENTRADA' ? (parseFloat(movOriginal.monto) || 0) : (movOriginal.tipo_movimiento === 'SALIDA' ? -(parseFloat(movOriginal.monto) || 0) : 0);
   const deltaNuevo = tipo === 'ENTRADA' ? monto : (tipo === 'SALIDA' ? -monto : 0);
 
   if (movOriginal.cuenta_id === cuenta.id) {
-    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - deltaOriginal + deltaNuevo;
+    if (movOriginal.tipo_movimiento === 'BALANCE') {
+      // revertir el balance original al saldo previo, luego aplicar el nuevo tipo
+      const base = (movOriginal.saldo_anterior != null && movOriginal.saldo_anterior !== undefined)
+        ? (parseFloat(movOriginal.saldo_anterior) || 0)
+        : (saldoPrevio - deltaOriginal);
+      cuenta.saldo_actual = (tipo === 'BALANCE') ? monto : (base + deltaNuevo);
+    } else {
+      cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - deltaOriginal + deltaNuevo;
+    }
   }
 
   // Vínculo CC
@@ -655,6 +669,7 @@ router.put('/cajas/movimientos/:id', (req, res) => {
     monto: monto,
     moneda: cuenta.moneda,
     cotizacion: (req.body.cotizacion !== undefined && req.body.cotizacion !== '') ? (parseFloat(req.body.cotizacion) || 1) : (parseFloat(movOriginal.cotizacion) || 1),
+    saldo_anterior: tipo === 'BALANCE' ? (parseFloat(movOriginal.saldo_anterior) || saldoPrevio) : null,
     persona_asociada: req.body.persona_asociada !== undefined ? req.body.persona_asociada : movOriginal.persona_asociada,
     comprobante_ref: req.body.comprobante_ref !== undefined ? req.body.comprobante_ref : movOriginal.comprobante_ref,
     entidad_id: nuevaEntidadId,
@@ -673,8 +688,13 @@ router.delete('/cajas/movimientos/:id', (req, res) => {
   const mov = store.caja_movimientos[index];
   const delta = mov.tipo_movimiento === 'ENTRADA' ? (parseFloat(mov.monto) || 0) : (mov.tipo_movimiento === 'SALIDA' ? -(parseFloat(mov.monto) || 0) : 0);
   const cuenta = (store.cuentas_caja || []).find(c => c.id === mov.cuenta_id || c.nombre === mov.cuenta_nombre);
-  if (cuenta && delta !== 0) {
-    cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - delta;
+  if (cuenta) {
+    if (mov.tipo_movimiento === 'BALANCE' && mov.saldo_anterior != null && mov.saldo_anterior !== undefined) {
+      // revertir el balance: volver al saldo previo al balance (conteo físico registrado)
+      cuenta.saldo_actual = parseFloat(mov.saldo_anterior) || 0;
+    } else if (delta !== 0) {
+      cuenta.saldo_actual = (parseFloat(cuenta.saldo_actual) || 0) - delta;
+    }
   }
 
   // Si el movimiento estaba vinculado a una CC, revertir su saldo y borrar el movimiento CC
