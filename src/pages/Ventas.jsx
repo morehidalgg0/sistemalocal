@@ -2,6 +2,43 @@ import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil, Trash2 } from 'lucide-react';
 
+const Donut = ({ npPct, mardelPct, otrosPct }) => {
+  const R = 54;
+  const CIRC = 2 * Math.PI * R;
+  const seg = (pct, color, offset) => {
+    if (pct <= 0) return null;
+    const len = (pct / 100) * CIRC;
+    return (
+      <circle
+        r={R}
+        cx="64"
+        cy="64"
+        fill="none"
+        stroke={color}
+        strokeWidth="18"
+        strokeDasharray={`${len} ${CIRC - len}`}
+        strokeDashoffset={offset}
+        transform="rotate(-90 64 64)"
+      />
+    );
+  };
+  const total = npPct + mardelPct + otrosPct;
+  if (total === 0) {
+    return (
+      <div className="flex items-center justify-center h-32 text-xs text-slate-500">
+        Sin ventas en el período.
+      </div>
+    );
+  }
+  return (
+    <svg viewBox="0 0 128 128" className="w-32 h-32 mx-auto">
+      {seg(npPct, '#38bdf8', 0)}
+      {seg(mardelPct, '#34d399', -(npPct / 100) * CIRC)}
+      {seg(otrosPct, '#64748b', -((npPct + mardelPct) / 100) * CIRC)}
+    </svg>
+  );
+};
+
 export default function Ventas({ config, onDataChange }) {
   const MESES_NOMBRES = ['ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'];
   const keyMes = (f) => { const d = f ? new Date(f) : new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
@@ -393,6 +430,26 @@ setShowModal(true);
       return ordenVentas === 'fecha_desc' ? -d : d;
     });
 
+  // Métricas del mes: 2 vendedores (NP / MARDEL), equipos vendidos y pesos vendidos
+  const statsVentas = useMemo(() => {
+    const ventasDelMes = ventasMes.length;
+    const porVendedor = {};
+    let pesosVendidos = 0;
+    (ventasMes || []).forEach(v => {
+      let vendedor = (v.vendedor_nombre || 'NP').trim();
+      if (vendedor.toUpperCase() === 'MARDEL') vendedor = 'MARDEL';
+      porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
+      const usd = parseFloat(v.precio_venta_usd) || 0;
+      const ars = parseFloat(v.precio_venta_pesos) || 0;
+      pesosVendidos += usd > 0 ? (usd * (parseFloat(v.cotizacion_dolar) || dolarCotiz)) : ars;
+    });
+    const np = porVendedor['NP'] || 0;
+    const mardel = porVendedor['MARDEL'] || 0;
+    const otros = ventasDelMes - np - mardel;
+    const pct = (n) => (ventasDelMes > 0 ? Math.round((n / ventasDelMes) * 100) : 0);
+    return { ventasDelMes, np, mardel, otros, pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros), pesosVendidos };
+  }, [ventasMes, dolarCotiz]);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -421,6 +478,9 @@ setShowModal(true);
         </button>
       </div>
 
+      {/* Métricas y gráfico por vendedor */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="lg:col-span-2 space-y-6">
       {/* Historial de Ventas */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
         <div className="p-4 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -561,6 +621,62 @@ setShowModal(true);
             </table>
           </div>
         )}
+      </div>
+      </div>
+
+      {/* Panel lateral: gráfico por vendedor + métricas del mes */}
+      <div className="lg:col-span-1 space-y-4">
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-sky-400" />
+            Ventas por Vendedor
+          </h3>
+          <Donut npPct={statsVentas.pctNP} mardelPct={statsVentas.pctMardel} otrosPct={statsVentas.pctOtros} />
+          <div className="mt-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-slate-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-sky-400 inline-block" />
+                NP
+              </span>
+              <span className="font-bold text-white">{statsVentas.pctNP}% <span className="text-slate-400 font-normal text-xs">({statsVentas.np} ventas)</span></span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-slate-300">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
+                MARDEL
+              </span>
+              <span className="font-bold text-white">{statsVentas.pctMardel}% <span className="text-slate-400 font-normal text-xs">({statsVentas.mardel} ventas)</span></span>
+            </div>
+            {statsVentas.otros > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2 text-slate-300">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block" />
+                  Otros
+                </span>
+                <span className="font-bold text-white">{statsVentas.pctOtros}% <span className="text-slate-400 font-normal text-xs">({statsVentas.otros} ventas)</span></span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Equipos Vendidos</div>
+          <div className="text-3xl font-bold text-white mt-1 font-mono">{statsVentas.ventasDelMes}</div>
+          <div className="text-[11px] text-slate-500 mt-1">
+            {mesSeleccionado ? labelMes(mesSeleccionado) : 'Todos los meses'}
+          </div>
+        </div>
+
+        <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+          <div className="text-xs text-slate-400 uppercase tracking-wider font-semibold">Pesos Vendidos</div>
+          <div className="text-3xl font-bold text-emerald-400 mt-1 font-mono">
+            ${statsVentas.pesosVendidos.toLocaleString('es-AR', { maximumFractionDigits: 0 })} ARS
+          </div>
+          <div className="text-[11px] text-slate-500 mt-1">
+            {mesSeleccionado ? labelMes(mesSeleccionado) : 'Todos los meses'} · a dolar ${dolarCotiz}
+          </div>
+        </div>
+      </div>
       </div>
 
       {/* Modal Facturar Venta con Selector Inteligente de Teléfono */}
