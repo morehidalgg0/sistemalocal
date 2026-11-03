@@ -12,7 +12,8 @@ import {
   X,
   RefreshCw,
   Sun,
-  Moon
+  Moon,
+  LogOut
 } from "lucide-react";
 
 import Dashboard from "./pages/Dashboard";
@@ -23,6 +24,7 @@ import Taller from "./pages/Taller";
 import Cajas from "./pages/Cajas";
 import CuentasCorrientes from "./pages/CuentasCorrientes";
 import GastosFinanzas from "./pages/GastosFinanzas";
+import Login from "./pages/Login";
 import fallbackData from "./data/fallbackData";
 
 // Última cotización conocida guardada en el navegador para evitar el salto a 1480
@@ -57,6 +59,8 @@ function saveDolarCache(info) {
 export default function App() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
   const [dashboardData, setDashboardData] = useState(null);
   const [config, setConfig] = useState(() => {
     const c = getDolarCache();
@@ -189,10 +193,59 @@ export default function App() {
     }
   };
 
+  // Verificamos la sesión al abrir la app.
   useEffect(() => {
+    let alive = true;
+    fetch("/api/auth/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!alive) return;
+        if (data && data.authenticated && data.user) setUser(data.user);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) setAuthChecking(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  // Si cualquier request devuelve 401, volvemos al login.
+  useEffect(() => {
+    const onUnauthorized = () => setUser(null);
+    window.addEventListener("np:unauthorized", onUnauthorized);
+    return () => window.removeEventListener("np:unauthorized", onUnauthorized);
+  }, []);
+
+  // Los datos se cargan recién cuando hay sesión iniciada.
+  useEffect(() => {
+    if (!user) return;
     fetchGlobalData();
     fetchDolar();
-  }, []);
+  }, [user]);
+
+  const handleLogout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" });
+    } catch {}
+    setUser(null);
+    setDashboardData(null);
+    setActiveTab("dashboard");
+    setSidebarOpen(false);
+  };
+
+  if (authChecking) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="w-8 h-8 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <Login onLogin={setUser} />;
+  }
 
   const navItems = [
     { id: "dashboard", label: "Panel General", icon: LayoutDashboard },
@@ -271,7 +324,25 @@ export default function App() {
         </div>
 
         {/* Footer info & System Status */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-900/50 space-y-2">
+        <div className="p-4 border-t border-slate-800/80 bg-slate-900/50 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full bg-sky-600/20 text-sky-300 flex items-center justify-center text-xs font-bold uppercase shrink-0">
+              {(user?.nombre || user?.email || "?").slice(0, 2)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-slate-200 font-medium truncate">
+                {user?.nombre || "Usuario"}
+              </p>
+              <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              title="Cerrar sesión"
+              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
           <div className="flex items-center justify-between text-xs text-slate-400">
             <span>Base de Datos:</span>
             <span className="inline-flex items-center gap-1.5 font-medium text-emerald-400">

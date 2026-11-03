@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import seedData from "./excelData.js";
 import { fetchDolarBlueMdp, obtenerDolarActual } from "./dolarService.js";
+import { installAuth } from "./auth.js";
 
 dotenv.config();
 
@@ -284,6 +285,9 @@ async function revertirDesglosePG(ref, itemDetalle, cajaFallback) {
 }
 
 // ---------------- ROUTES ----------------
+
+// Autenticación: protege /api/* y agrega /api/auth/*. Debe ir antes que las rutas.
+installAuth(app, q);
 
 app.get("/api/config", async (req, res) => {
   try {
