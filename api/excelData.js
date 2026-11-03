@@ -11,7 +11,6 @@ const configuracion = {
 const vendedores = [
   { id: 1, nombre: "NP", porcentaje_comision: 10, activo: true },
   { id: 2, nombre: "Eze", porcentaje_comision: 10, activo: true },
-  { id: 3, nombre: "Mardel", porcentaje_comision: 10, activo: true },
   { id: 4, nombre: "Fran", porcentaje_comision: 10, activo: true },
   { id: 5, nombre: "Lara", porcentaje_comision: 10, activo: true },
   { id: 6, nombre: "Ger", porcentaje_comision: 10, activo: true },

@@ -51,6 +51,33 @@ async function q(text, params = []) {
   throw new Error("POSTGRES_UNAVAILABLE");
 }
 
+// Migraciones de datos idempotentes (se ejecutan una vez por instancia).
+let dataMigrationsReady = false;
+async function ensureDataMigrations() {
+  if (dataMigrationsReady) return;
+  try {
+    const t = await q(
+      "SELECT to_regclass('public.vendedores') AS v, to_regclass('public.entidades_cc') AS e, to_regclass('public.movimientos_cc') AS m"
+    );
+    const row = (t.rows && t.rows[0]) || {};
+    if (row.v) {
+      // Mardel ya no es vendedor: se desactiva para conservar el historial de ventas.
+      await q("UPDATE vendedores SET activo = FALSE WHERE UPPER(TRIM(nombre)) = 'MARDEL'");
+    }
+    if (row.e && row.m) {
+      // Si existe como cuenta de socio y no tiene movimientos, se elimina.
+      await q(
+        `DELETE FROM entidades_cc ec
+          WHERE UPPER(TRIM(ec.nombre)) = 'MARDEL'
+            AND NOT EXISTS (SELECT 1 FROM movimientos_cc mc WHERE mc.entidad_id = ec.id)`
+      );
+    }
+    dataMigrationsReady = true;
+  } catch (err) {
+    console.warn("Migración de datos:", err.message);
+  }
+}
+
 // Postgres devuelve columnas NUMERIC como strings ("330.00"). El frontend usa .toFixed/.toLocaleString,
 // así que normalizamos a Number las columnas numéricas antes de responder por JSON.
 const COLUMNS_NUMERICAS = new Set([
@@ -75,7 +102,7 @@ function numericize(row) {
   return out;
 }
 
-// Resumen del mes actual: ventas por vendedor (NP/MARDEL), equipos vendidos y pesos vendidos.
+// Resumen del mes actual: ventas por vendedor (NP / otros), equipos vendidos y pesos vendidos.
 function resumenVentasVendedor(ventas, dolar) {
   const now = new Date();
   const mesKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -87,8 +114,7 @@ function resumenVentasVendedor(ventas, dolar) {
   const porVendedor = {};
   let pesosVendidos = 0;
   delMes.forEach(v => {
-    let vendedor = (v.vendedor_nombre || "NP").trim();
-    if (vendedor.toUpperCase() === "MARDEL") vendedor = "MARDEL";
+    const vendedor = (v.vendedor_nombre || "NP").trim();
     porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
     const usd = parseFloat(v.precio_venta_usd) || 0;
     const ars = parseFloat(v.precio_venta_pesos) || 0;
@@ -96,10 +122,10 @@ function resumenVentasVendedor(ventas, dolar) {
   });
   const total = delMes.length;
   const np = porVendedor["NP"] || 0;
-  const mardel = porVendedor["MARDEL"] || 0;
-  const otros = total - np - mardel;
+  const otros = total - np;
   const pct = n => (total > 0 ? Math.round((n / total) * 100) : 0);
-  return { mes: mesKey, np, mardel, otros, pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros), equiposVendidos: total, pesosVendidos };
+  // mardel/pctMardel quedan en 0 por compatibilidad con clientes viejos en caché.
+  return { mes: mesKey, np, mardel: 0, otros, pctNP: pct(np), pctMardel: 0, pctOtros: pct(otros), equiposVendidos: total, pesosVendidos };
 }
 
 // Ajusta la ganancia de ventas que tienen accesorios bonificados (regalo_componentes):
@@ -288,6 +314,12 @@ async function revertirDesglosePG(ref, itemDetalle, cajaFallback) {
 
 // Autenticación: protege /api/* y agrega /api/auth/*. Debe ir antes que las rutas.
 installAuth(app, q);
+
+// Migraciones de datos antes de servir el resto de las rutas.
+app.use(async (req, res, next) => {
+  await ensureDataMigrations();
+  next();
+});
 
 app.get("/api/config", async (req, res) => {
   try {
@@ -1936,11 +1968,11 @@ app.post("/api/inversiones", async (req, res) => {
 
 app.get("/api/vendedores", async (req, res) => {
   try {
-    const r = await q("SELECT * FROM vendedores ORDER BY id");
+    const r = await q("SELECT * FROM vendedores WHERE activo = TRUE ORDER BY id");
     if (r.rows && r.rows.length > 0) return res.json(r.rows.map(numericize));
-    return res.json(memStore.vendedores || []);
+    return res.json((memStore.vendedores || []).filter(v => v.activo !== false));
   } catch (e) {
-    res.json(memStore.vendedores || []);
+    res.json((memStore.vendedores || []).filter(v => v.activo !== false));
   }
 });
 

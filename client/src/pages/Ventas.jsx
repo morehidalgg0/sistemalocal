@@ -2,7 +2,7 @@ import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { TrendingUp, Plus, DollarSign, Smartphone, User, CheckCircle2, ShieldCheck, Tag, Search, Check, Sparkles, Pencil, Trash2 } from 'lucide-react';
 
-const Donut = ({ npPct, mardelPct, otrosPct }) => {
+const Donut = ({ npPct, otrosPct }) => {
   const R = 54;
   const CIRC = 2 * Math.PI * R;
   const seg = (pct, color, offset) => {
@@ -22,7 +22,7 @@ const Donut = ({ npPct, mardelPct, otrosPct }) => {
       />
     );
   };
-  const total = npPct + mardelPct + otrosPct;
+  const total = npPct + otrosPct;
   if (total === 0) {
     return (
       <div className="flex items-center justify-center h-32 text-xs text-slate-500">
@@ -33,8 +33,7 @@ const Donut = ({ npPct, mardelPct, otrosPct }) => {
   return (
     <svg viewBox="0 0 128 128" className="w-32 h-32 mx-auto">
       {seg(npPct, '#38bdf8', 0)}
-      {seg(mardelPct, '#34d399', -(npPct / 100) * CIRC)}
-      {seg(otrosPct, '#64748b', -((npPct + mardelPct) / 100) * CIRC)}
+      {seg(otrosPct, '#64748b', -(npPct / 100) * CIRC)}
     </svg>
   );
 };
@@ -451,29 +450,26 @@ setShowModal(true);
       return ordenVentas === 'fecha_desc' ? -d : d;
     });
 
-  // Métricas del mes: 2 vendedores (NP / MARDEL), equipos vendidos y ganancia por vendedor
+  // Métricas del mes: ventas NP / otros, equipos vendidos y ganancia por vendedor
   const statsVentas = useMemo(() => {
     const ventasDelMes = ventasMes.length;
     const porVendedor = {};
-    let gananciaNP = 0, gananciaMardel = 0, gananciaOtros = 0;
+    let gananciaNP = 0, gananciaOtros = 0;
     (ventasMes || []).forEach(v => {
-      let vendedor = (v.vendedor_nombre || 'NP').trim();
-      if (vendedor.toUpperCase() === 'MARDEL') vendedor = 'MARDEL';
+      const vendedor = (v.vendedor_nombre || 'NP').trim();
       porVendedor[vendedor] = (porVendedor[vendedor] || 0) + 1;
       const gan = parseFloat(v.ganancia_usd) || 0;
       if (vendedor === 'NP') gananciaNP += gan;
-      else if (vendedor === 'MARDEL') gananciaMardel += gan;
       else gananciaOtros += gan;
     });
     const np = porVendedor['NP'] || 0;
-    const mardel = porVendedor['MARDEL'] || 0;
-    const otros = ventasDelMes - np - mardel;
+    const otros = ventasDelMes - np;
     const pct = (n) => (ventasDelMes > 0 ? Math.round((n / ventasDelMes) * 100) : 0);
     return {
-      ventasDelMes, np, mardel, otros,
-      pctNP: pct(np), pctMardel: pct(mardel), pctOtros: pct(otros),
-      gananciaNP, gananciaMardel, gananciaOtros,
-      pesosVendidos: (gananciaNP + gananciaMardel + gananciaOtros)
+      ventasDelMes, np, otros,
+      pctNP: pct(np), pctOtros: pct(otros),
+      gananciaNP, gananciaOtros,
+      pesosVendidos: (gananciaNP + gananciaOtros)
     };
   }, [ventasMes]);
 
@@ -663,7 +659,7 @@ setShowModal(true);
             <TrendingUp className="w-4 h-4 text-sky-400" />
             Ventas por Vendedor
           </h3>
-          <Donut npPct={statsVentas.pctNP} mardelPct={statsVentas.pctMardel} otrosPct={statsVentas.pctOtros} />
+          <Donut npPct={statsVentas.pctNP} otrosPct={statsVentas.pctOtros} />
           <div className="mt-4 space-y-2 text-sm">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-2 text-slate-300">
@@ -671,13 +667,6 @@ setShowModal(true);
                 NP
               </span>
               <span className="font-bold text-white">{statsVentas.pctNP}% <span className="text-slate-400 font-normal text-xs">({statsVentas.np} ventas)</span></span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="flex items-center gap-2 text-slate-300">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-                MARDEL
-              </span>
-              <span className="font-bold text-white">{statsVentas.pctMardel}% <span className="text-slate-400 font-normal text-xs">({statsVentas.mardel} ventas)</span></span>
             </div>
             {statsVentas.otros > 0 && (
               <div className="flex items-center justify-between">
@@ -705,10 +694,6 @@ setShowModal(true);
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-300">NP</span>
               <span className="text-sm font-bold text-emerald-400 font-mono">+${statsVentas.gananciaNP.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-300">MARDEL</span>
-              <span className="text-sm font-bold text-emerald-400 font-mono">+${statsVentas.gananciaMardel.toLocaleString('es-AR', { maximumFractionDigits: 1 })} USD</span>
             </div>
             {statsVentas.otros > 0 && (
               <div className="flex items-center justify-between">

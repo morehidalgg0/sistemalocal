@@ -20,12 +20,6 @@ export const fallbackData = {
       "activo": true
     },
     {
-      "id": 3,
-      "nombre": "Mardel",
-      "porcentaje_comision": 10,
-      "activo": true
-    },
-    {
       "id": 4,
       "nombre": "Fran",
       "porcentaje_comision": 10,

@@ -279,7 +279,7 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
             </p>
             <div className="flex items-center gap-4">
               <div className="relative w-24 h-24 shrink-0">
-                <Donut np={data?.ventasVendedor?.np || 0} mardel={data?.ventasVendedor?.mardel || 0} otros={data?.ventasVendedor?.otros || 0} />
+                <Donut np={data?.ventasVendedor?.np || 0} otros={data?.ventasVendedor?.otros || 0} />
                 <div className="absolute inset-0 flex items-center justify-center flex-col">
                   <span className="text-lg font-bold text-white leading-none">{data?.ventasVendedor?.equiposVendidos || 0}</span>
                   <span className="text-[9px] text-slate-400 leading-tight mt-0.5">equipos</span>
@@ -293,13 +293,15 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
                   </span>
                   <span className="font-bold text-white">{data?.ventasVendedor?.np || 0} <span className="text-slate-400 font-normal">({data?.ventasVendedor?.pctNP || 0}%)</span></span>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="flex items-center gap-1.5 text-slate-300">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block" />
-                    MARDEL
-                  </span>
-                  <span className="font-bold text-white">{data?.ventasVendedor?.mardel || 0} <span className="text-slate-400 font-normal">({data?.ventasVendedor?.pctMardel || 0}%)</span></span>
-                </div>
+                {(data?.ventasVendedor?.otros || 0) > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-slate-300">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-500 inline-block" />
+                      Otros
+                    </span>
+                    <span className="font-bold text-white">{data?.ventasVendedor?.otros || 0} <span className="text-slate-400 font-normal">({data?.ventasVendedor?.pctOtros || 0}%)</span></span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between border-t border-slate-800 pt-1.5">
                   <span className="text-slate-400">Pesos vendidos</span>
                   <span className="font-bold text-emerald-400">${(data?.ventasVendedor?.pesosVendidos || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })}</span>
@@ -319,8 +321,8 @@ export default function Dashboard({ data, config, dolarInfo, onNavigate }) {
   );
 }
 
-function Donut({ np, mardel, otros }) {
-  const total = np + mardel + otros;
+function Donut({ np, otros }) {
+  const total = np + otros;
   if (total === 0) {
     return (
       <svg viewBox="0 0 42 42" className="w-full h-full -rotate-90">
@@ -346,7 +348,6 @@ function Donut({ np, mardel, otros }) {
     offset += (value / total) * C;
   };
   add(np, "#38bdf8");
-  add(mardel, "#34d399");
   add(otros, "#64748b");
   return (
     <svg viewBox="0 0 42 42" className="w-full h-full -rotate-90">
