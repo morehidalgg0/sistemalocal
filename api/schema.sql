@@ -211,3 +211,25 @@ CREATE TABLE IF NOT EXISTS inversiones (
   categoria VARCHAR(50) DEFAULT 'Mobiliario y Herramientas',
   observaciones TEXT
 );
+
+-- USUARIOS DEL SISTEMA (login con email y contraseña)
+CREATE TABLE IF NOT EXISTS usuarios (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(150) UNIQUE NOT NULL,
+  nombre VARCHAR(120),
+  password_hash TEXT NOT NULL,
+  rol VARCHAR(20) NOT NULL DEFAULT 'OWNER', -- 'OWNER', 'EMPLOYEE'
+  activo BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  last_login TIMESTAMPTZ
+);
+
+-- SESIONES ACTIVAS (cookie HttpOnly -> token)
+CREATE TABLE IF NOT EXISTS sesiones (
+  token VARCHAR(64) PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_sesiones_expires ON sesiones(expires_at);
