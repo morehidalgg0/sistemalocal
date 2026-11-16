@@ -380,6 +380,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                       const esCargo = m.tipo === 'ENTREGA_EQUIPO' || m.tipo === 'SERVICIO_TECNICO';
                       const esEquipo = m.tipo === 'ENTREGA_EQUIPO';
                       const esAjuste = m.tipo === 'AJUSTE';
+                      const esCobro = m.tipo === 'COBRO_RECIBIDO'; // nos pagan: el saldo sube hacia 0
                       const rowStyle = esCargo
                         ? 'bg-slate-800/30 border-slate-800 hover:border-sky-600/40'
                         : esAjuste
@@ -403,7 +404,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] text-slate-500">{fmtFecha(m.fecha)}</span>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${iconStyle}`}>
-                                  {esEquipo ? 'Entrega de Equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : 'Pago Realizado'}
+                                  {esEquipo ? 'Entrega de Equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : esCobro ? 'Cobro Recibido' : 'Pago Realizado'}
                                 </span>
                               </div>
                               <div className={`font-semibold text-sm text-white truncate mt-0.5 ${esEquipo ? 'flex items-center gap-1.5' : ''}`}>
@@ -417,7 +418,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <div className={`text-right font-bold font-mono ${esCargo ? 'text-rose-400' : esAjuste ? 'text-amber-400' : 'text-emerald-400'}`}>
-                              {esAjuste ? `$${m.monto?.toLocaleString('es-AR')}` : `${esCargo ? '+' : '-'}$${m.monto?.toLocaleString('es-AR')}`}
+                              {esAjuste ? `$${m.monto?.toLocaleString('es-AR')}` : `${esCargo || esCobro ? '+' : '-'}$${m.monto?.toLocaleString('es-AR')}`}
                               <span className="block text-[10px] font-sans font-normal text-slate-500">{m.moneda}</span>
                             </div>
                             <button
@@ -458,7 +459,8 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   onChange={e => setMovForm({ ...movForm, tipo: e.target.value })}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                 >
-                  <option value="PAGO_REALIZADO">🟢 PAGO (Resta de la deuda)</option>
+                  <option value="PAGO_REALIZADO">🟢 PAGO QUE HACEMOS (baja lo que le debemos)</option>
+                  <option value="COBRO_RECIBIDO">🔵 COBRO QUE RECIBIMOS (baja lo que nos debe)</option>
                   <option value="ENTREGA_EQUIPO">🔴 INGRESA EQUIPO (Suma a la deuda)</option>
                   <option value="AJUSTE">⚪ AJUSTE / CORRECCIÓN</option>
                 </select>

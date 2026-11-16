@@ -102,6 +102,19 @@ function numericize(row) {
   return out;
 }
 
+// Efecto de un movimiento de cuenta corriente sobre el saldo de la entidad.
+// Saldo positivo = le debemos; saldo negativo = nos debe.
+//   ENTREGA_EQUIPO / SERVICIO_TECNICO → suma (le debemos más)
+//   PAGO_REALIZADO (le pagamos)        → resta
+//   COBRO_RECIBIDO (nos paga)          → suma (baja lo que nos debe)
+//   AJUSTE                             → no mueve el saldo
+function efectoSaldoCC(tipo, monto) {
+  const m = parseFloat(monto) || 0;
+  if (tipo === "ENTREGA_EQUIPO" || tipo === "SERVICIO_TECNICO" || tipo === "COBRO_RECIBIDO") return m;
+  if (tipo === "PAGO_REALIZADO") return -m;
+  return 0;
+}
+
 // Resumen del mes actual: ventas por vendedor (NP / otros), equipos vendidos y pesos vendidos.
 function resumenVentasVendedor(ventas, dolar) {
   const now = new Date();
@@ -970,10 +983,11 @@ app.post("/api/cajas/movimientos", async (req, res) => {
     }
   }
 
-  // Si hay CC asociada: crear movimiento de cuenta corriente vinculado (PAGO/COBRO debita el saldo)
+  // Si hay CC asociada: crear movimiento de cuenta corriente vinculado
+  // (SALIDA = le pagamos: resta; ENTRADA = nos paga: suma, ver efectoSaldoCC)
   if (entidadId && entidad) {
     const tipoCC = b.tipo_movimiento === "SALIDA" ? "PAGO_REALIZADO" : "COBRO_RECIBIDO";
-    const nuevoSaldo = (parseFloat(entidad.saldo_adeudado) || 0) - monto;
+    const nuevoSaldo = (parseFloat(entidad.saldo_adeudado) || 0) + efectoSaldoCC(tipoCC, monto);
     entidad.saldo_adeudado = nuevoSaldo;
     const movCC = {
       id: Date.now(),
@@ -1144,7 +1158,8 @@ app.put("/api/cajas/movimientos/:id", async (req, res) => {
           return (memStore.entidades_cc || []).find(en => en.id === entidadOriginalId) || null;
         })();
         if (entidadOrig) {
-          entidadOrig.saldo_adeudado = (parseFloat(entidadOrig.saldo_adeudado) || 0) + (movCC.monto || 0);
+          // Revertir el efecto del movimiento CC original
+          entidadOrig.saldo_adeudado = (parseFloat(entidadOrig.saldo_adeudado) || 0) - efectoSaldoCC(movCC.tipo, movCC.monto);
           const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === entidadOriginalId);
           if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = entidadOrig.saldo_adeudado;
           if (process.env.DATABASE_URL) {
@@ -1186,8 +1201,8 @@ app.put("/api/cajas/movimientos/:id", async (req, res) => {
           return (memStore.entidades_cc || []).find(en => en.id === nuevaEntidadId) || null;
         })();
         if (entidadCC) {
-          // El saldo fue revertido arriba (sumó el monto original). Ahora aplicamos el nuevo.
-          entidadCC.saldo_adeudado = (parseFloat(entidadCC.saldo_adeudado) || 0) - monto;
+          // El saldo fue revertido arriba (se deshizo el efecto original). Ahora aplicamos el nuevo.
+          entidadCC.saldo_adeudado = (parseFloat(entidadCC.saldo_adeudado) || 0) + efectoSaldoCC(tipoCC, monto);
           movCC.fecha = updated.fecha;
           movCC.tipo = tipoCC;
           movCC.concepto = updated.concepto || movCC.concepto;
@@ -1225,7 +1240,7 @@ app.put("/api/cajas/movimientos/:id", async (req, res) => {
       }
       if (entidadObj) {
         const tipoCC = tipo === "SALIDA" ? "PAGO_REALIZADO" : "COBRO_RECIBIDO";
-        const nuevoSaldo = (parseFloat(entidadObj.saldo_adeudado) || 0) - monto;
+        const nuevoSaldo = (parseFloat(entidadObj.saldo_adeudado) || 0) + efectoSaldoCC(tipoCC, monto);
         entidadObj.saldo_adeudado = nuevoSaldo;
         const movCC = {
           id: Date.now(),
@@ -1343,7 +1358,7 @@ app.delete("/api/cajas/movimientos/:id", async (req, res) => {
     }
     if (!mCC) mCC = (memStore.movimientos_cc || []).find(m => m.caja_movimiento_id === id) || null;
     if (mCC) {
-      // Revertir saldo de la entidad (el PAGO/COBRO debitó monto; hay que sumarlo de vuelta)
+      // Revertir saldo de la entidad: se deshace el efecto del PAGO/COBRO vinculado
       const montoCC = parseFloat(mCC.monto) || 0;
       let entidad = null;
       if (process.env.DATABASE_URL) {
@@ -1357,7 +1372,7 @@ app.delete("/api/cajas/movimientos/:id", async (req, res) => {
       }
       if (!entidad) entidad = (memStore.entidades_cc || []).find(en => en.id === entidadId) || null;
       if (entidad) {
-        entidad.saldo_adeudado = (parseFloat(entidad.saldo_adeudado) || 0) + montoCC;
+        entidad.saldo_adeudado = (parseFloat(entidad.saldo_adeudado) || 0) - efectoSaldoCC(mCC.tipo, montoCC);
         const eIdxMem = (memStore.entidades_cc || []).findIndex(en => en.id === entidadId);
         if (eIdxMem !== -1) memStore.entidades_cc[eIdxMem].saldo_adeudado = entidad.saldo_adeudado;
         if (process.env.DATABASE_URL) {
@@ -1456,9 +1471,8 @@ app.post("/api/cuentas-corrientes/:id/movimientos", async (req, res) => {
   if (!e) return res.status(404).json({ error: "Entidad no encontrada" });
 
   const monto = parseFloat(b.monto) || 0;
-  let nuevoSaldo = parseFloat(e.saldo_adeudado) || 0;
-  if (b.tipo === "ENTREGA_EQUIPO" || b.tipo === "SERVICIO_TECNICO") nuevoSaldo += monto;
-  else if (b.tipo === "PAGO_REALIZADO" || b.tipo === "COBRO_RECIBIDO") nuevoSaldo -= monto;
+  // PAGO resta (le pagamos); COBRO suma (nos paga lo que nos debe); equipo/servicio suma.
+  const nuevoSaldo = (parseFloat(e.saldo_adeudado) || 0) + efectoSaldoCC(b.tipo, monto);
 
   e.saldo_adeudado = nuevoSaldo;
   const newMov = {
@@ -1518,7 +1532,8 @@ app.put("/api/cuentas-corrientes/:id/movimientos/:movId", async (req, res) => {
   }
   if (!mov) return res.status(404).json({ error: "Movimiento no encontrado" });
 
-  const esCarga = (t) => t === "ENTREGA_EQUIPO" || t === "SERVICIO_TECNICO";
+  // Tipos que suben el saldo (el cobro baja lo que nos deben, que es saldo negativo)
+  const esCarga = (t) => t === "ENTREGA_EQUIPO" || t === "SERVICIO_TECNICO" || t === "COBRO_RECIBIDO";
   const nuevoTipo = b.tipo || mov.tipo;
   const nuevoMonto = (b.monto !== undefined && b.monto !== "") ? (parseFloat(b.monto) || 0) : (parseFloat(mov.monto) || 0);
 
