@@ -2,6 +2,16 @@ import fallbackData from "../data/fallbackData";
 import React, { useState, useEffect } from 'react';
 import { Users, Plus, ArrowUpRight, ArrowDownRight, CreditCard, ChevronRight, DollarSign, Pencil, Trash2, Smartphone, Search } from 'lucide-react';
 
+// Saldo de una cuenta corriente visto desde el local:
+// positivo = le debemos (lo normal con proveedores); negativo = nos debe.
+function textoSaldo(valor, moneda) {
+  const n = parseFloat(valor) || 0;
+  const monto = `$${Math.abs(n).toLocaleString('es-AR')} ${moneda || ''}`.trim();
+  if (n > 0) return { etiqueta: 'Le debemos', monto, color: 'text-rose-400' };
+  if (n < 0) return { etiqueta: 'Nos debe', monto, color: 'text-emerald-400' };
+  return { etiqueta: 'Al día', monto, color: 'text-slate-300' };
+}
+
 export default function CuentasCorrientes({ config, onDataChange }) {
   const fmtFecha = (iso) => {
     if (!iso) return '—';
@@ -308,9 +318,11 @@ export default function CuentasCorrientes({ config, onDataChange }) {
 
                 <div className="flex items-center gap-4">
                   <div className="bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-700 text-right">
-                    <div className="text-[10px] uppercase tracking-wider text-slate-400">Total Saldo Adeudado</div>
-                    <div className="text-xl font-bold font-mono text-rose-400">
-                      ${parseFloat(selectedEntidad.saldo_adeudado || 0).toLocaleString('es-AR')} {selectedEntidad.moneda_principal}
+                    <div className="text-[10px] uppercase tracking-wider text-slate-400">
+                      {textoSaldo(selectedEntidad.saldo_adeudado).etiqueta}
+                    </div>
+                    <div className={`text-xl font-bold font-mono ${textoSaldo(selectedEntidad.saldo_adeudado).color}`}>
+                      {textoSaldo(selectedEntidad.saldo_adeudado, selectedEntidad.moneda_principal).monto}
                     </div>
                   </div>
 
@@ -339,7 +351,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   <h3 className="text-sm font-bold text-slate-300">Detalle de Equipos / Operaciones</h3>
                   {movimientos.length > 0 && (
                     <span className="text-[11px] text-slate-500">
-                      Total en esta cuenta: <span className="text-slate-300 font-semibold">${parseFloat(selectedEntidad.saldo_adeudado || 0).toLocaleString('es-AR')} {selectedEntidad.moneda_principal}</span>
+                      {textoSaldo(selectedEntidad.saldo_adeudado).etiqueta}: <span className="text-slate-300 font-semibold">{textoSaldo(selectedEntidad.saldo_adeudado, selectedEntidad.moneda_principal).monto}</span>
                     </span>
                   )}
                 </div>
@@ -404,7 +416,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-[11px] text-slate-500">{fmtFecha(m.fecha)}</span>
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${iconStyle}`}>
-                                  {esEquipo ? 'Entrega de Equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : esCobro ? 'Cobro Recibido' : 'Pago Realizado'}
+                                  {esEquipo ? 'Ingresó equipo' : esAjuste ? 'Ajuste / Corrección' : esCargo ? 'Servicio / Cargo' : esCobro ? 'Nos devolvió / nos pagó' : 'Le pagamos'}
                                 </span>
                               </div>
                               <div className={`font-semibold text-sm text-white truncate mt-0.5 ${esEquipo ? 'flex items-center gap-1.5' : ''}`}>
@@ -412,7 +424,7 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                                 <span>{m.concepto}</span>
                               </div>
                               <div className="text-[11px] text-slate-500 mt-1">
-                                Saldo resultante: <span className="font-mono text-slate-400">${m.saldo_resultante?.toLocaleString('es-AR')} {m.moneda}</span>
+                                Después de esto: <span className="font-mono text-slate-400">{textoSaldo(m.saldo_resultante).etiqueta.toLowerCase()} {textoSaldo(m.saldo_resultante, m.moneda).monto}</span>
                               </div>
                             </div>
                           </div>
@@ -459,9 +471,9 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   onChange={e => setMovForm({ ...movForm, tipo: e.target.value })}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white"
                 >
-                  <option value="PAGO_REALIZADO">🟢 PAGO QUE HACEMOS (baja lo que le debemos)</option>
-                  <option value="COBRO_RECIBIDO">🔵 COBRO QUE RECIBIMOS (baja lo que nos debe)</option>
-                  <option value="ENTREGA_EQUIPO">🔴 INGRESA EQUIPO (Suma a la deuda)</option>
+                  <option value="ENTREGA_EQUIPO">🔴 INGRESA EQUIPO / MERCADERÍA (sube lo que le debemos)</option>
+                  <option value="PAGO_REALIZADO">🟢 LE PAGAMOS (baja lo que le debemos)</option>
+                  <option value="COBRO_RECIBIDO">🔵 NOS DEVUELVE / NOS PAGA (solo si él nos debe)</option>
                   <option value="AJUSTE">⚪ AJUSTE / CORRECCIÓN</option>
                 </select>
               </div>
@@ -619,6 +631,9 @@ export default function CuentasCorrientes({ config, onDataChange }) {
                   placeholder="0.00"
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white font-mono"
                 />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Lo que le debemos, en positivo (ej. 1500). Solo si él nos debe a nosotros, en negativo (ej. -200).
+                </p>
               </div>
 
               <div>
