@@ -4,6 +4,11 @@ import crypto from "crypto";
 // Sesiones persistidas en Postgres (funcionan entre instancias serverless)
 // y contraseñas hasheadas con scrypt (sin dependencias externas).
 
+// Interruptor del login. En false, la app entra directo sin usuario ni
+// contraseña y la API no pide sesión. Para volver a pedir login: true.
+// (Los usuarios y contraseñas ya creados quedan guardados en la base.)
+export const LOGIN_ACTIVO = false;
+
 const SESSION_COOKIE = "np_session";
 const SESSION_TTL_DAYS = 30;
 const MIN_PASSWORD_LENGTH = 8;
@@ -189,6 +194,7 @@ export function installAuth(app, q) {
   // ---- Middleware: todo /api/* requiere sesión salvo las rutas públicas ----
   app.use(async (req, res, next) => {
     if (!req.path.startsWith("/api/")) return next();
+    if (!LOGIN_ACTIVO) return next(); // login desactivado: acceso libre
     if (req.method === "OPTIONS") return next();
     if (PUBLIC_PATHS.has(req.path)) return next();
     if (isCronRequest(req)) return next();
@@ -209,6 +215,15 @@ export function installAuth(app, q) {
 
   // ---- Estado público: ¿hay cuentas? ¿estoy logueado? ----
   app.get("/api/auth/status", async (req, res) => {
+    // Login desactivado: la app entra directo con un usuario genérico.
+    if (!LOGIN_ACTIVO) {
+      return res.json({
+        hasUsers: true,
+        authenticated: true,
+        loginDesactivado: true,
+        user: { id: 0, email: "", nombre: "Usuario", rol: "OWNER" },
+      });
+    }
     try {
       await ensureAuthSchema(q);
       const total = await q("SELECT COUNT(*)::int AS c FROM usuarios");

@@ -61,6 +61,8 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(true);
+  // true cuando el login está apagado en el servidor (LOGIN_ACTIVO = false)
+  const [sinLogin, setSinLogin] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
   const [config, setConfig] = useState(() => {
     const c = getDolarCache();
@@ -201,6 +203,7 @@ export default function App() {
       .then((data) => {
         if (!alive) return;
         if (data && data.authenticated && data.user) setUser(data.user);
+        if (data && data.loginDesactivado) setSinLogin(true);
       })
       .catch(() => {})
       .finally(() => {
@@ -335,13 +338,15 @@ export default function App() {
               </p>
               <p className="text-[11px] text-slate-500 truncate">{user?.email}</p>
             </div>
-            <button
-              onClick={handleLogout}
-              title="Cerrar sesión"
-              className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            {!sinLogin && (
+              <button
+                onClick={handleLogout}
+                title="Cerrar sesión"
+                className="p-2 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
           </div>
           <div className="flex items-center justify-between text-xs text-slate-400">
             <span>Base de Datos:</span>
